@@ -18,7 +18,8 @@ from pinner.repo.mongo import AUDIT_TTL_SECONDS, migrate
 EXPECTED_INDEXES = {
     "products": {"_id_", "ux_source_product", "ix_claim", "ix_dedup", "ix_archive"},
     "pins": {"_id_", "ux_account_product", "ux_pin_id", "ix_claim", "ix_account_status_recent"},
-    "accounts": {"_id_", "ix_status", "ix_niche"},
+    "accounts": {"_id_", "ux_name", "ix_status", "ix_niche"},
+    "niches": {"_id_", "ux_name"},
     "oauth_tokens": {"_id_", "ux_account"},
     "runs": {"_id_", "ix_started"},
     "pin_metrics": {"_id_", "ix_pin_ts", "ix_account_ts"},

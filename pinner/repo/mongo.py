@@ -57,8 +57,12 @@ COLLECTION_INDEXES: dict[str, tuple[IndexModel, ...]] = {
         ),
     ),
     "accounts": (
+        IndexModel([("name", 1)], name="ux_name", unique=True),
         IndexModel([("status", 1)], name="ix_status"),
         IndexModel([("niche_id", 1)], name="ix_niche"),
+    ),
+    "niches": (
+        IndexModel([("name", 1)], name="ux_name", unique=True),
     ),
     "oauth_tokens": (
         IndexModel([("account_id", 1)], name="ux_account", unique=True),

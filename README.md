@@ -17,9 +17,9 @@ control flow and side effects.** The orchestrator never asks a model what to do 
 | WP2 | Mongo index migrations incl. 3 unique double-publish backstops | ✅ done |
 | WP3 | Declarative state machine registry + pure validator | ✅ done |
 | WP4 | Repo layer: atomic claims, leases, transitions, sweeps | ✅ done |
-| WP5 | Governor (warm-up curves, quotas, spacing) | planned |
-| WP6 | AES-256-GCM token envelope encryption | planned |
-| WP7 | Seeds (niches/accounts) + ops tools | planned |
+| WP5 | Governor (warm-up curves, quotas, spacing) | ✅ done |
+| WP6 | AES-256-GCM token envelope encryption | ✅ done |
+| WP7 | Seeds (niches/accounts) + ops tools | ✅ done |
 | Phase 2 | Adapters, ADK agents, bridge/pinterest tools | planned |
 | Phase 3 | GH Actions runner, Telegram, dashboard | planned |
 
@@ -51,10 +51,14 @@ Mongo-backed tests (migrations, unique-index guarantees) need a reachable Mongo:
   (default `affiliate-pinner-test`) and **drop it per test** — your production
   database is never modified.
 
-## Migrations
+## Migrations & Seeding & Ops
 
 ```bash
-python scripts/migrate.py            # creates all indexes (idempotent, safe per deploy)
+python scripts/migrate.py                                        # indexes (idempotent)
+python scripts/seed.py --github-user <your-github-username>      # niches + 3 accounts
+python scripts/ops.py status                                      # health snapshot
+python scripts/ops.py pause --account "NeatSpace Kitchen"        # kill switch
+python scripts/ops.py requeue --collection pins --id <ObjectId>   # dead-letter revive
 ```
 
 ## Safety-critical invariants (do not weaken)
@@ -63,10 +67,13 @@ python scripts/migrate.py            # creates all indexes (idempotent, safe per
 2. `pins(account_id, product_id)` unique — **a product can never be pinned twice
    to one account**, even by buggy code.
 3. `pins(pin_id)` partial unique — API-level duplicate pins are rejected.
-4. All control flow lives in `pinner/statemachine/registry.py` as data; the
+4. `accounts(name)` / `niches(name)` unique — scale-by-insertion can't fork an identity.
+5. All control flow lives in `pinner/statemachine/registry.py` as data; the
    exhaustive matrix tests in `tests/test_registry.py` are the contract. A
    transition not in the registry cannot happen.
-5. Forward-only state machines; only `OPS` events exit terminal states.
+6. Forward-only state machines; only `OPS` events exit terminal states.
+7. OAuth tokens are AES-256-GCM envelope-encrypted at rest (`pinner/crypto`);
+   the master key exists only in the environment.
 
 ## Layout
 
