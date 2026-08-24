@@ -1,0 +1,23 @@
+# Phase 3 placeholder: the autonomous cron runner lands here (pinner/runner/main.py).
+# Schedule stays commented out until Phase 3 so nothing executes unintentionally.
+name: Runner
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 */4 * * *"
+
+concurrency:
+  group: pin-runner
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: echo "WP4-WP7 + Phase 2/3 orchestrator not yet implemented"
