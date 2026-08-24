@@ -24,6 +24,7 @@ from pinner.statemachine import (
     PUBLICATION_TRANSITIONS,
     AmbiguousTransitionError,
     IllegalTransitionError,
+    Kind,
     Machine,
     PinState,
     ProductState,
@@ -36,6 +37,7 @@ from pinner.statemachine import (
     sweep_target,
     terminal_states,
     transition_for,
+    transition_of_kind,
     working_states,
 )
 
@@ -225,6 +227,20 @@ def test_sweep_targets_return_to_predecessor_idle_state():
 def test_sweep_rejects_non_working_state():
     with pytest.raises(ValueError):
         sweep_target(Machine.PUBLICATION, "QUEUED")
+
+
+def test_transition_of_kind_resolves_unique_paths():
+    assert transition_of_kind(Machine.PUBLICATION, "ENRICHING", Kind.RETRY).target == "QUEUED"
+    assert transition_of_kind(Machine.PUBLICATION, "PINNING", Kind.POISON).target == "DEAD"
+    assert transition_of_kind(Machine.INGEST, "FETCHING", Kind.RETRY).target == "PENDING_FETCH"
+    assert transition_of_kind(Machine.INGEST, "MODERATING", Kind.POISON).target == "DEAD_MODERATE"
+
+
+def test_transition_of_kind_raises_when_absent():
+    with pytest.raises(IllegalTransitionError):
+        transition_of_kind(Machine.PUBLICATION, "VERIFIED", Kind.RETRY)  # terminal: no exits
+    with pytest.raises(IllegalTransitionError):
+        transition_of_kind(Machine.PUBLICATION, "QUEUED", Kind.POISON)  # IDLE, not a failure state
 
 
 def test_legal_events_examples():

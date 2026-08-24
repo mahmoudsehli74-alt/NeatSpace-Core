@@ -16,7 +16,7 @@ control flow and side effects.** The orchestrator never asks a model what to do 
 | WP1 | Scaffold, CI (mongo:7 service container), env contract | ✅ done |
 | WP2 | Mongo index migrations incl. 3 unique double-publish backstops | ✅ done |
 | WP3 | Declarative state machine registry + pure validator | ✅ done |
-| WP4 | Repo layer: atomic claims, leases, transitions, sweeps | ⏭ next |
+| WP4 | Repo layer: atomic claims, leases, transitions, sweeps | ✅ done |
 | WP5 | Governor (warm-up curves, quotas, spacing) | planned |
 | WP6 | AES-256-GCM token envelope encryption | planned |
 | WP7 | Seeds (niches/accounts) + ops tools | planned |
@@ -73,7 +73,8 @@ python scripts/migrate.py            # creates all indexes (idempotent, safe per
 ```
 pinner/
 ├── statemachine/    # registry.py (pure data) + validator.py (pure functions)  [WP3]
-├── repo/            # mongo.py (migrations) [WP2]; products/pins/audit [WP4]
+├── repo/            # mongo.py [WP2]; engine.py (claims/leases/transitions/
+│                    #   sweeps/pause) + pins.py + products.py + audit.py [WP4]
 ├── governor/        # quotas (WP5)
 ├── crypto/          # token envelope (WP6)
 ├── adapters/        # aliexpress (+temu/amazon later)          [Phase 2]

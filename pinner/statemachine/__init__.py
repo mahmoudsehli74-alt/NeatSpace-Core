@@ -24,6 +24,7 @@ from pinner.statemachine.validator import (
     sweep_target,
     terminal_states,
     transition_for,
+    transition_of_kind,
     transitions_from,
     working_states,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "sweep_target",
     "terminal_states",
     "transition_for",
+    "transition_of_kind",
     "transitions_from",
     "working_states",
 ]

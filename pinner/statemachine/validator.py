@@ -117,6 +117,24 @@ def terminal_states(machine: Machine | str) -> frozenset[str]:
     return states_with_role(machine, Role.TERMINAL)
 
 
+def transition_of_kind(machine: Machine | str, source: str, kind: Kind) -> Transition:
+    """The unique transition of a given KIND out of a state (e.g. the RETRY or
+    POISON path from a WORKING state). Registry invariants guarantee exactly
+    one exists for WORKING states; raises IllegalTransitionError if none and
+    ValueError if ambiguous."""
+    m = _machine(machine)
+    rows = [
+        t
+        for t in TRANSITIONS
+        if t.machine is m and t.source == source and t.kind is Kind(kind)
+    ]
+    if not rows:
+        raise IllegalTransitionError(m, source, f"<kind:{kind}>")
+    if len(rows) > 1:
+        raise ValueError(f"ambiguous {kind} transitions from {source!r} in {m}")
+    return rows[0]
+
+
 def sweep_target(machine: Machine | str, working_state: str) -> str:
     """Where an expired lease returns a WORKING state to (its predecessor IDLE state)."""
     rows = transitions_from(machine, working_state, "SWEEP_EXPIRED")
