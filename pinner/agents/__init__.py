@@ -16,7 +16,7 @@ from pinner.agents.moderator import Moderator
 from pinner.agents.schemas import ModerationVerdict, StrategyContent
 from pinner.agents.strategist import Strategist
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 def build_agents(
