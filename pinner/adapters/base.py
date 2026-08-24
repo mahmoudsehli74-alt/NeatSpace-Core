@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from pinner.errors import PermanentError, TransientError
+
 # Normalized product payload — exactly the shape stored in products.raw.
 RawProduct = dict[str, Any]
 
@@ -23,11 +25,11 @@ class AdapterError(Exception):
         super().__init__(f"[{source}] {message}")
 
 
-class TransientAdapterError(AdapterError):
+class TransientAdapterError(AdapterError, TransientError):
     """Rate limits, 5xx, timeouts, gateway hiccups — worth retrying."""
 
 
-class PermanentAdapterError(AdapterError):
+class PermanentAdapterError(AdapterError, PermanentError):
     """Bad params, product gone, policy rejection — retrying only burns quota."""
 
 

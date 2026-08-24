@@ -23,8 +23,8 @@ control flow and side effects.** The orchestrator never asks a model what to do 
 | Hello pipeline | End-to-end state walk + crash matrix (Phase 1 exit gate) | ✅ done |
 | P2: AliExpress adapter | IOP MD5 signing, transport seam, error taxonomy, contract tests | ✅ done |
 | P2: ADK agents | Moderator + Strategist | ✅ done |
-| P2: bridge/pinterest tools | GitHub Pages committer + Pinterest v5 client | planned |
-| P2: runner | Real cron loop + runs doc | planned |
+| P2: bridge/pinterest tools | GitHub Pages committer + Pinterest v5 client | ✅ done |
+| P2: runner | Real cron loop + runs doc | ⏭ next |
 
 ## Setup
 
