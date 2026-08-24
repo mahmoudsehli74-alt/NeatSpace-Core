@@ -20,6 +20,7 @@ control flow and side effects.** The orchestrator never asks a model what to do 
 | WP5 | Governor (warm-up curves, quotas, spacing) | ✅ done |
 | WP6 | AES-256-GCM token envelope encryption | ✅ done |
 | WP7 | Seeds (niches/accounts) + ops tools | ✅ done |
+| Hello pipeline | End-to-end state walk + crash matrix (Phase 1 exit gate) | ✅ done |
 | Phase 2 | Adapters, ADK agents, bridge/pinterest tools | planned |
 | Phase 3 | GH Actions runner, Telegram, dashboard | planned |
 
