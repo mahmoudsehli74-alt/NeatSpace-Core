@@ -21,8 +21,10 @@ control flow and side effects.** The orchestrator never asks a model what to do 
 | WP6 | AES-256-GCM token envelope encryption | ✅ done |
 | WP7 | Seeds (niches/accounts) + ops tools | ✅ done |
 | Hello pipeline | End-to-end state walk + crash matrix (Phase 1 exit gate) | ✅ done |
-| Phase 2 | Adapters, ADK agents, bridge/pinterest tools | planned |
-| Phase 3 | GH Actions runner, Telegram, dashboard | planned |
+| P2: AliExpress adapter | IOP MD5 signing, transport seam, error taxonomy, contract tests | ✅ done |
+| P2: ADK agents | Moderator + Strategist | ⏭ next |
+| P2: bridge/pinterest tools | GitHub Pages committer + Pinterest v5 client | planned |
+| P2: runner | Real cron loop + runs doc | planned |
 
 ## Setup
 
