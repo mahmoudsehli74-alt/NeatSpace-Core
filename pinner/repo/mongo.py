@@ -90,5 +90,7 @@ def migrate(db: Database) -> dict[str, list[str]]:
     """Create all collections' indexes (idempotent). Returns created index names."""
     report: dict[str, list[str]] = {}
     for collection, models in COLLECTION_INDEXES.items():
-        report[collection] = db[collection].create_indexes(models)
+        # pymongo's create_indexes strictly requires a list; the module-level
+        # spec stays a tuple (immutable declaration data).
+        report[collection] = db[collection].create_indexes(list(models))
     return report
