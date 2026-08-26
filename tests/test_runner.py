@@ -221,7 +221,7 @@ def test_full_run_end_to_end_verified(mdb):
     pin = mdb.pins.find_one()
     assert pin["status"] == "VERIFIED"
     assert pin["pin"]["pin_id"] == "pin-77"
-    assert pin["bridge"]["url"].endswith("/product.html?id=stub-store-kitchen-organization-1")
+    assert pin["bridge"]["url"].endswith("/?id=stub-store-kitchen-organization-1")
     assert pin["bridge"]["commit_sha"] == "sha-x"
 
     account = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
@@ -251,7 +251,7 @@ def test_dry_run_never_touches_pinterest(mdb):
 
 
 def test_reconcile_adopts_existing_pin(mdb):
-    bridge_url_suffix = "product.html?id=stub-store-kitchen-organization-1"
+    bridge_url_suffix = "?id=stub-store-kitchen-organization-1"
     pinterest = [
         reply({"items": [{"id": "b-1", "name": "Kitchen Organization"}]}),
         reply({"items": [{"id": "pin-existing", "link": f"https://neatspace-kitchen.github.io/{bridge_url_suffix}"}]}),

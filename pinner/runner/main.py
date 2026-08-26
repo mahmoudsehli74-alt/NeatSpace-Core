@@ -89,6 +89,7 @@ def _landing_payload(product: dict, content: dict, product_key: str) -> dict:
             "title": raw.get("title"),
             "price": raw.get("price"),
             "image": (raw.get("images") or [None])[0],
+            "images": (raw.get("images") or [])[:5],
             "source_url": raw.get("source_url"),
         },
         "affiliate_url": product.get("affiliate_url"),
@@ -401,7 +402,7 @@ class Runner:
         json_url = f"{base}/products/{product_key}.json"
         if not self.deps.bridge.verify_deployed(json_url):
             raise ToolTransientError(f"bridge not deployed after push: {json_url}")
-        bridge_url = f"{base}/product.html?id={product_key}"
+        bridge_url = f"{base}/?id={product_key}"
         self.pins.transition(
             pin_doc["_id"],
             "BRIDGE_OK",
