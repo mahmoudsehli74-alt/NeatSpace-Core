@@ -1,11 +1,12 @@
 # Weekly learning loop: metrics + analyst proposal -> Telegram HITL.
-# Schedule is gated like runner.yml — enable when the dry-run cycles are done.
+# LIVE: cron activated at go-live. Mondays 09:00 UTC, after the weekend's
+# Pinterest traffic accrues — the analyst reads Friday-to-Monday data.
 name: Weekly Analyst
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "0 9 * * 1"   # Mondays 09:00 UTC
+  schedule:
+    - cron: "0 9 * * 1" # Mondays 09:00 UTC
 
 concurrency:
   group: weekly-analyst

@@ -157,7 +157,7 @@ def make_deps(
             if account and not db.oauth_tokens.find_one({"account_id": str(account["_id"])}):
                 db.oauth_tokens.insert_one({
                     "account_id": str(account["_id"]),
-                    "encrypted_blob": crypto.encrypt_token(KEY32, "refresh-token-1"),
+                    "refresh_blob": crypto.encrypt_token(KEY32, "refresh-token-1"),
                 })
         return store
 
@@ -324,8 +324,9 @@ def test_token_expiry_refreshes_and_retries(mdb):
     assert fakes["refresh_transport"].calls[0]["url"].endswith("/v5/oauth/token")
     account = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
     # rotated refresh token persisted (still decryptable with the master key)
-    blob = mdb.oauth_tokens.find_one({"account_id": str(account["_id"])})["encrypted_blob"]
-    assert crypto.decrypt_token(KEY32, blob) == "new-rt"
+    tokens_doc = mdb.oauth_tokens.find_one({"account_id": str(account["_id"])})
+    assert crypto.decrypt_token(KEY32, tokens_doc["refresh_blob"]) == "new-rt"
+    assert crypto.decrypt_token(KEY32, tokens_doc["access_blob"]) == "new-at"
 
 
 def test_governor_blocks_when_warmup_cap_saturated(mdb):

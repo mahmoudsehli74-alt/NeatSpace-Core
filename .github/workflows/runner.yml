@@ -1,6 +1,13 @@
-# NeatSpace autonomous runner.
-# Schedule is INTENTIONALLY commented out until you complete the supervised
-# --dry-run cycle(s) and want live pinning. Enable it by uncommenting below.
+# NeatSpace autonomous runner — LIVE (cron activated).
+#
+# Schedule semantics: scheduled runs receive NO dispatch inputs, so
+# inputs.dry_run is empty -> the pipeline runs LIVE automatically.
+# Manual dispatches keep full control (dry_run checkbox, fetch budget).
+#
+# Cadence rationale: every 4h (6 runs/day) with early-exit on idle keeps
+# minute usage low (~1-3 min/no-op run) while letting transient failures
+# recover on the next tick. Actual pin volume is capped by the governor's
+# warm-up curve (2/day day 1-14), NOT by cron frequency.
 name: Runner
 
 on:
@@ -9,12 +16,12 @@ on:
       dry_run:
         description: "Dry run (never calls Pinterest)"
         type: boolean
-        default: true
+        default: false
       fetch_budget:
         description: "Products to fetch this run"
         default: "5"
-  # schedule:
-  #   - cron: "0 */4 * * *"   # every 4 hours (6 runs/day)
+  schedule:
+    - cron: "0 */4 * * *" # every 4 hours (6 runs/day, UTC)
 
 concurrency:
   group: pin-runner
@@ -44,7 +51,9 @@ jobs:
           ALIEXPRESS_APP_KEY: ${{ secrets.ALIEXPRESS_APP_KEY }}
           ALIEXPRESS_APP_SECRET: ${{ secrets.ALIEXPRESS_APP_SECRET }}
           ALIEXPRESS_TRACKING_ID: ${{ secrets.ALIEXPRESS_TRACKING_ID }}
-          BRIDGE_PAT: ${{ secrets.BRIDGE_PAT }}
+          # Canonical BRIDGE_PAT (GitHub forbids GITHUB_-prefixed secret names);
+          # accepts the legacy name as a fallback if only that exists.
+          BRIDGE_PAT: ${{ secrets.BRIDGE_PAT || secrets.GITHUB_BRIDGE_PAT }}
           PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
           PINTEREST_APP_SECRET: ${{ secrets.PINTEREST_APP_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

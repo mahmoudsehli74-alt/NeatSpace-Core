@@ -307,6 +307,17 @@ class Runner:
         niches = {n["_id"]: n for n in self.db.niches.find()}
         for account in accounts:
             account_id = str(account["_id"])
+            if not self.cfg.dry_run:
+                try:
+                    self.deps.token_store.access_token(account_id)
+                except KeyError as exc:
+                    self.stats["accounts_without_tokens"] = (
+                        self.stats.get("accounts_without_tokens", 0) + 1
+                    )
+                    self._alert(
+                        f"[{self.run_id}] skipping {account.get('name')!r}: {exc}"
+                    )
+                    continue
             if should_graduate(account, self.now()):
                 self.db.accounts.update_one({"_id": account["_id"]}, {"$set": {"status": "ACTIVE"}})
                 account = self.db.accounts.find_one({"_id": account["_id"]})
