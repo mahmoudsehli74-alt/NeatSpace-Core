@@ -159,6 +159,42 @@ class PinterestTool:
             "url": f"https://www.pinterest.com/pin/{body['id']}/",
         }
 
+    def get_pin_analytics(
+        self,
+        pin_id: str,
+        *,
+        start_date: str,
+        end_date: str,
+        metric_types: str = "IMPRESSION,PIN_CLICK,OUTBOUND_CLICK,SAVE",
+    ) -> dict:
+        """Daily analytics for a pin: {metric: total} over [start_date, end_date]
+        (ISO dates). Tolerant parser for v5's all/daily_metrics shape."""
+        import datetime as _dt
+
+        start = _dt.date.fromisoformat(start_date)
+        end = _dt.date.fromisoformat(end_date)
+        url = (
+            f"{PINTEREST_API}/pins/{pin_id}/analytics"
+            f"?start_date={start.isoformat()}&end_date={end.isoformat()}"
+            f"&metric_types={metric_types}&app_types=all"
+        )
+        reply = self._transport("GET", url, headers=_bearer(self._token))
+        if reply.status != 200:
+            _raise(reply.status, f"pin analytics {pin_id}")
+        body = reply.json().get("all") or {}
+        totals = {key: 0 for key in metric_types.split(",")}
+        daily = body.get("daily_metrics") or []
+        for day in daily:
+            metrics = day.get("metrics") or {}
+            for key in totals:
+                value = metrics.get(key) or 0
+                totals[key] += int(value if not isinstance(value, dict) else value.get("value", 0))
+        lifetime = body.get("lifetime_metrics") or {}
+        for key in totals:
+            if totals[key] == 0 and key in lifetime:
+                totals[key] = int(lifetime[key] or 0)
+        return totals
+
     def get_pin(self, pin_id: str) -> dict:
         """Fetch a pin for post-create verification (id, board_id, ...)."""
         reply = self._transport(

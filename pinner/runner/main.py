@@ -555,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         moderator=moderator,
         strategist=strategist,
-        bridge=_Bridge(settings.github_bridge_pat),
+        bridge=_Bridge(settings.bridge_pat),
         token_store=TokenStore(
             db,
             load_master_key(settings.token_master_key),

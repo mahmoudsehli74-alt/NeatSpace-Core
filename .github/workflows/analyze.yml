@@ -1,0 +1,44 @@
+# Weekly learning loop: metrics + analyst proposal -> Telegram HITL.
+# Schedule is gated like runner.yml — enable when the dry-run cycles are done.
+name: Weekly Analyst
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 9 * * 1"   # Mondays 09:00 UTC
+
+concurrency:
+  group: weekly-analyst
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -e .
+
+      - name: Collect metrics
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          MONGO_DB: ${{ secrets.MONGO_DB }}
+          TOKEN_MASTER_KEY: ${{ secrets.TOKEN_MASTER_KEY }}
+          PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
+          PINTEREST_APP_SECRET: ${{ secrets.PINTEREST_APP_SECRET }}
+        run: python scripts/metrics.py
+
+      - name: Analyst proposal -> Telegram
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          MONGO_DB: ${{ secrets.MONGO_DB }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/analyze.py

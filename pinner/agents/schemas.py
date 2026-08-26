@@ -30,3 +30,17 @@ class StrategyContent(BaseModel):
     disclosure: bool = Field(
         default=True, description="affiliate disclosure acknowledgment — must be true"
     )
+
+
+class ProposalItem(BaseModel):
+    target: Literal[
+        "title_style", "description_style", "hashtags", "landing_angle", "board_strategy"
+    ]
+    change: str = Field(max_length=300)
+    rationale: str = Field(max_length=300)
+
+
+class PerformanceProposal(BaseModel):
+    summary: str = Field(max_length=400)
+    proposals: list[ProposalItem] = Field(min_length=1, max_length=5)
+    keep_doing: str = Field(max_length=300, description="what the data says works")

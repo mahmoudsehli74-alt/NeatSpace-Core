@@ -31,7 +31,7 @@ class Settings:
     aliexpress_app_key: str = ""
     aliexpress_app_secret: str = ""
     aliexpress_tracking_id: str = ""
-    github_bridge_pat: str = ""
+    bridge_pat: str = ""
     pinterest_app_id: str = ""
     pinterest_app_secret: str = ""
     telegram_bot_token: str = ""
@@ -74,7 +74,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         aliexpress_app_key=os.environ.get("ALIEXPRESS_APP_KEY", ""),
         aliexpress_app_secret=os.environ.get("ALIEXPRESS_APP_SECRET", ""),
         aliexpress_tracking_id=os.environ.get("ALIEXPRESS_TRACKING_ID", ""),
-        github_bridge_pat=os.environ.get("GITHUB_BRIDGE_PAT", ""),
+        # GitHub forbids secret names starting with GITHUB_; BRIDGE_PAT is canonical.
+        bridge_pat=os.environ.get("BRIDGE_PAT") or os.environ.get("GITHUB_BRIDGE_PAT", ""),
         pinterest_app_id=os.environ.get("PINTEREST_APP_ID", ""),
         pinterest_app_secret=os.environ.get("PINTEREST_APP_SECRET", ""),
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),

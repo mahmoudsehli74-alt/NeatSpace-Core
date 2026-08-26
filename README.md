@@ -25,7 +25,9 @@ control flow and side effects.** The orchestrator never asks a model what to do 
 | P2: ADK agents | Moderator + Strategist | ✅ done |
 | P2: bridge/pinterest tools | GitHub Pages committer + Pinterest v5 client | ✅ done |
 | P2: runner | Cron loop, dry-run mode, Telegram, token rotation | ✅ done |
-| Phase 3 | Dashboard, pin_metrics learning loop, supervised go-live | ⏭ next |
+| P3: learning loop | Metrics collector + CTR aggregation + archiver | ✅ done |
+| P3: analyst agent | Weekly proposal -> Telegram HITL | ✅ done |
+| P3: go-live | Supervised dry-run, then enable cron schedules | 🎯 you are here |
 
 ## Setup
 
