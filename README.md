@@ -24,7 +24,8 @@ control flow and side effects.** The orchestrator never asks a model what to do 
 | P2: AliExpress adapter | IOP MD5 signing, transport seam, error taxonomy, contract tests | ✅ done |
 | P2: ADK agents | Moderator + Strategist | ✅ done |
 | P2: bridge/pinterest tools | GitHub Pages committer + Pinterest v5 client | ✅ done |
-| P2: runner | Real cron loop + runs doc | ⏭ next |
+| P2: runner | Cron loop, dry-run mode, Telegram, token rotation | ✅ done |
+| Phase 3 | Dashboard, pin_metrics learning loop, supervised go-live | ⏭ next |
 
 ## Setup
 

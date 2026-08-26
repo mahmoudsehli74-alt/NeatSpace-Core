@@ -28,6 +28,7 @@ class ProductsRepo:
         source_product_id: str,
         *,
         dedup_hash: str | None = None,
+        extra: dict | None = None,
         now: datetime | None = None,
     ) -> tuple[str, dict]:
         """Register a discovered product. Returns ("created"|"exists", doc).
@@ -43,6 +44,7 @@ class ProductsRepo:
             "first_seen_at": now,
             "last_updated_at": now,
             "created_at": now,
+            **(extra or {}),
         }
         try:
             self.db[COLLECTION].insert_one(doc)

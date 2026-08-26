@@ -23,11 +23,12 @@ class PinsRepo:
         self.db = db
 
     def claim_next_for_account(
-        self, account_id: str, run_id: str, **kwargs
+        self, account_id: str, run_id: str, *, events: tuple[str, ...] | None = None, **kwargs
     ) -> tuple[dict, str] | None:
         """Claim the most urgent pin for an account. Returns (doc, event) so
-        the caller knows which stage it just entered, or None."""
-        for event in _CLAIM_ORDER:
+        the caller knows which stage it just entered, or None. ``events``
+        overrides the claim order (dry-run passes an order without CLAIM_PIN)."""
+        for event in events or _CLAIM_ORDER:
             doc = engine.claim_one(
                 self.db,
                 COLLECTION,

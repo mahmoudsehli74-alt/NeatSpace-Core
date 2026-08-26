@@ -15,6 +15,9 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
+# Local test infrastructure (throwaway mongod for integration tests)
+.localtools/
+
 # OS
 .DS_Store
 Thumbs.db
