@@ -186,8 +186,10 @@ def test_iop_business_error_is_permanent():
 
 
 def test_missing_wrapper_and_bad_codes():
+    # Unexpected schema is PERMANENT with raw-body diagnostics (go-live fix):
+    # a stable shape difference will not heal on retry.
     adapter, _ = make_adapter(lambda form: json.dumps({"unexpected": {}}))
-    with pytest.raises(TransientAdapterError):
+    with pytest.raises(PermanentAdapterError):
         adapter.search_products("x")
     adapter2, _ = make_adapter(
         lambda form: json.dumps(
@@ -254,3 +256,65 @@ def test_live_smoke():
     assert "s.click.aliexpress.com" in affiliate or TRACKING_ID in affiliate
     raw = adapter.get_product_details(candidates[0])
     assert raw["title"] and raw["images"] and raw["price"]["current"] is not None
+
+
+# --- diagnostics & schema tolerance (go-live incident: "biz error None: None") -----
+
+
+def test_schema_drift_surfaces_raw_body_not_none():
+    """The go-live failure: wrapper present, resp_result absent -> previously
+    raised 'biz error None: None'. Now the exception must embed the raw body
+    so credentials-vs-parsing is diagnosable from Telegram alone."""
+    adapter, _ = make_adapter(
+        lambda form: json.dumps({"aliexpress_affiliate_product_query_response": {"foo": "bar"}})
+    )
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.search_products("x")
+    message = str(err.value)
+    assert "schema drift" in message and "raw body" in message or "body=" in message
+    assert 'foo' in message  # the raw content is IN the message
+
+
+def test_error_fields_outside_error_response_are_surfaced():
+    adapter, _ = make_adapter(
+        lambda form: json.dumps({"error_code": "600001", "error_msg": "invalid app key"})
+    )
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.search_products("x")
+    assert "600001" in str(err.value) and "invalid app key" in str(err.value)
+
+
+def test_shape_b_result_without_resp_result_is_tolerated():
+    """Some IOP deployments nest products directly under the wrapper."""
+    adapter, _ = make_adapter(
+        lambda form: json.dumps(
+            {"aliexpress_affiliate_product_query_response": {"products": [PRODUCT_ITEM]}}
+        )
+    )
+    candidates = adapter.search_products("kitchen")
+    assert len(candidates) == 1
+    assert candidates[0].source_product_id == "1005006123456789"
+
+
+def test_shape_b_promotion_links_directly_under_wrapper():
+    adapter, _ = make_adapter(
+        lambda form: json.dumps(
+            {"aliexpress_affiliate_link_generate_response": {
+                "promotion_links": [{"promotion_link": "https://s.click.aliexpress.com/e/_B"}]
+            }}
+        )
+    )
+    assert adapter.build_affiliate_url("https://x/item/1.html").endswith("_B")
+
+
+def test_biz_error_still_logged_with_body():
+    adapter, _ = make_adapter(
+        lambda form: json.dumps(
+            {"aliexpress_affiliate_product_query_response": {
+                "resp_result": {"code": 401, "msg": "unauthorized client"}
+            }}
+        )
+    )
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.search_products("x")
+    assert "biz error 401" in str(err.value)

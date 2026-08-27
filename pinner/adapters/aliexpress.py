@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from collections.abc import Callable
 from typing import Any
@@ -36,6 +37,8 @@ from pinner.adapters.base import (
     RawProduct,
     TransientAdapterError,
 )
+
+logger = logging.getLogger(__name__)
 
 IOP_GATEWAY = "https://api-sg.aliexpress.com/sync"
 SIGN_METHOD = "md5"
@@ -57,6 +60,20 @@ def _to_form_value(value: Any) -> str:
     if isinstance(value, (list, dict)):
         return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
     return str(value)
+
+
+def _raw_snippet(text: str, limit: int = 500) -> str:
+    """Safe one-line snippet of a raw gateway response for diagnostics."""
+    compact = " ".join(str(text).split())
+    return compact[:limit] + ("…" if len(compact) > limit else "")
+
+
+def _error_fields(payload: dict) -> str | None:
+    """Sniff top-level error fields AliExpress uses OUTSIDE error_response."""
+    for key in ("error_code", "errorCode", "error_msg", "error_desc", "msg", "sub_msg"):
+        if payload.get(key):
+            return f"{key}={payload[key]!r}"
+    return None
 
 
 def _default_transport(
@@ -192,21 +209,56 @@ class AliExpressAdapter:
             if code in TRANSIENT_IOP_CODES:
                 raise TransientAdapterError("aliexpress", message)
             raise PermanentAdapterError("aliexpress", message)
-        # Real API wrapper for "aliexpress.affiliate.product.query" is
-        # "aliexpress_affiliate_product_query_response" — the method string
-        # already carries the namespace, no extra prefix.
         wrapper = f"{method.replace('.', '_')}_response"
         resp = payload.get(wrapper)
+
+        def reject(kind: str) -> PermanentAdapterError:
+            """Opaque responses MUST surface the raw body — empty biz errors
+            ("biz error None: None") are unw diagnosable garbage."""
+            detail = _error_fields(payload) or "no recognizable fields"
+            logger.warning(
+                "[aliexpress] %s for %s | raw body: %s",
+                kind, method, _raw_snippet(text),
+            )
+            return PermanentAdapterError(
+                "aliexpress",
+                f"{kind} (body={_raw_snippet(text, 220)}; fields={detail})",
+            )
+
         if not isinstance(resp, dict):
-            raise TransientAdapterError("aliexpress", f"unexpected schema (no {wrapper})")
-        resp_result = resp.get("resp_result") or {}
-        code = resp_result.get("code")
-        if code not in (200, 0):
-            message = f"biz error {code}: {resp_result.get('msg')}"
-            if code in TRANSIENT_IOP_CODES:
-                raise TransientAdapterError("aliexpress", message)
-            raise PermanentAdapterError("aliexpress", message)
-        return resp_result.get("result") or {}
+            raise reject(f"unexpected schema (no {wrapper})")
+
+        resp_result = resp.get("resp_result")
+
+        # Shape A (documented): {resp_result:{code,msg,result}}
+        if isinstance(resp_result, dict):
+            code = resp_result.get("code")
+            if code not in (200, 0):
+                biz = f"biz error {code}: {resp_result.get('msg')}"
+                logger.warning(
+                    "[aliexpress] %s for %s | raw body: %s", biz, method, _raw_snippet(text)
+                )
+                if code in TRANSIENT_IOP_CODES:
+                    raise TransientAdapterError("aliexpress", biz)
+                raise PermanentAdapterError("aliexpress", biz)
+            result = resp_result.get("result") or {}
+        elif resp_result is None:
+            # Shape B tolerated: some IOP deployments nest result directly
+            # under the wrapper without a resp_result layer.
+            direct_keys = {"products", "product_detail", "promotion_links", "result"}
+            if direct_keys & set(resp.keys()):
+                result = resp.get("result") or {
+                    k: v for k, v in resp.items() if k in direct_keys and k != "result"
+                }
+                for candidate_key in ("products", "product_detail", "promotion_links"):
+                    if candidate_key in resp:
+                        result = {candidate_key: resp[candidate_key]}
+                        break
+            else:
+                raise reject("schema drift: neither resp_result nor known result keys")
+        else:
+            raise reject("resp_result present but not an object")
+        return result
 
     # --- adapter contract ---------------------------------------------------------
 

@@ -193,9 +193,15 @@ class Runner:
                 candidates = self.deps.adapter.search_products(keywords, max_results=8)
             except Exception as exc:
                 self.stats["discovery_errors"] += 1
+                detail = str(exc)[:400]  # adapter diagnostics now embedded in msg
                 self._alert(
                     f"[{self.run_id}] discovery failed for {niche['name']}: "
-                    f"{type(exc).__name__}: {str(exc)[:200]}"
+                    f"{type(exc).__name__}: {detail}"
+                )
+                self.db.runs.update_one(
+                    {"run_id": self.run_id},
+                    {"$set": {f"discovery_errors.{niche['name']}": {
+                        "type": type(exc).__name__, "detail": detail}}},
                 )
                 continue
             for candidate in candidates:
@@ -541,7 +547,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from pinner.adapters.base import get_adapter
     from pinner.agents import build_agents
-    from pinner.config import load_settings
+    from pinner.config import load_settings, require_credentials
     from pinner.crypto.tokens import load_master_key
     from pinner.repo.mongo import get_client
     from pinner.tools.bridge import BridgeTool as _Bridge
@@ -549,6 +555,20 @@ def main(argv: list[str] | None = None) -> int:
     from pinner.tools.pinterest import download_image as _download_image
 
     settings = load_settings()
+
+    # Fail fast with NAMED missing secrets instead of opaque gateway errors.
+    features = ["aliexpress", "gemini"]
+    if not args.dry_run:
+        features += ["pinterest"]
+    require_credentials(settings, *features)
+    if not settings.bridge_pat:
+        import logging
+
+        logging.warning(
+            "BRIDGE_PAT empty (also checked legacy GITHUB_BRIDGE_PAT) — "
+            "bridge stage will fail later; set it in GitHub Secrets"
+        )
+
     db = get_client(settings.mongo_uri)[args.db or settings.mongo_db]
 
     def telegram(text: str) -> None:

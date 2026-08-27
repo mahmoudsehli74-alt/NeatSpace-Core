@@ -20,6 +20,16 @@ except ImportError:  # pragma: no cover - python-dotenv is a hard dependency, gu
 REQUIRED_KEYS = ("MONGO_URI", "MONGO_DB", "TOKEN_MASTER_KEY")
 
 
+# Credentials each integration requires. Names are logged on failure;
+# VALUES never are.
+CREDENTIAL_REQUIREMENTS = {
+    "aliexpress": ("ALIEXPRESS_APP_KEY", "ALIEXPRESS_APP_SECRET", "ALIEXPRESS_TRACKING_ID"),
+    "gemini": ("GEMINI_API_KEY",),
+    "pinterest": ("PINTEREST_APP_ID", "PINTEREST_APP_SECRET"),
+    "bridge": ("BRIDGE_PAT",),
+}
+
+
 @dataclass(frozen=True)
 class Settings:
     mongo_uri: str
@@ -51,6 +61,44 @@ def _load_env_file(explicit: Path | None) -> None:
         _load_dotenv(cwd_env)
     elif repo_env.exists():
         _load_dotenv(repo_env)
+
+
+def missing_credentials(settings: Settings, feature: str) -> list[str]:
+    """Env-var NAMES missing for a feature (checked by presence only)."""
+    values = {
+        "ALIEXPRESS_APP_KEY": settings.aliexpress_app_key,
+        "ALIEXPRESS_APP_SECRET": settings.aliexpress_app_secret,
+        "ALIEXPRESS_TRACKING_ID": settings.aliexpress_tracking_id,
+        "GEMINI_API_KEY": settings.gemini_api_key,
+        "PINTEREST_APP_ID": settings.pinterest_app_id,
+        "PINTEREST_APP_SECRET": settings.pinterest_app_secret,
+        "BRIDGE_PAT": settings.bridge_pat or os.environ.get("GITHUB_BRIDGE_PAT", ""),
+    }
+    return [name for name in CREDENTIAL_REQUIREMENTS.get(feature, ()) if not values.get(name)]
+
+
+def require_credentials(settings: Settings, *features: str) -> None:
+    """Fail fast BEFORE spending API calls when integration secrets are absent.
+
+    Raises RuntimeError naming every missing env var (never their values), plus
+    where to fix them. This is the antidote to opaque downstream errors like
+    "biz error None: None" caused by ALIEXPRESS_APP_KEY="".
+    """
+    problems: dict[str, list[str]] = {}
+    for feature in features:
+        missing = missing_credentials(settings, feature)
+        if missing:
+            problems[feature] = missing
+    if problems:
+        lines = [
+            f"{feature}: missing {', '.join(names)}"
+            for feature, names in problems.items()
+        ]
+        raise RuntimeError(
+            "missing required credentials:\n  "
+            + "\n  ".join(lines)
+            + "\nFix GitHub Secrets (or local .env); names are case-sensitive."
+        )
 
 
 def load_settings(env_file: Path | None = None) -> Settings:
