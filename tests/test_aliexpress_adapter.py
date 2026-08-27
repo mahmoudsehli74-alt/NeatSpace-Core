@@ -29,9 +29,9 @@ def make_adapter(handler: Any) -> tuple[ax.AliExpressAdapter, list[dict]]:
     """Adapter whose transport records every posted form and replies via handler."""
     posted: list[dict] = []
 
-    def transport(url: str, form: dict[str, str]) -> str:
+    def transport(url: str, form: dict[str, str]) -> tuple[int, str]:
         posted.append({"url": url, "form": dict(form)})
-        return handler(form)
+        return 200, handler(form)
 
     return ax.AliExpressAdapter(APP_KEY, APP_SECRET, TRACKING_ID, transport=transport), posted
 
@@ -224,6 +224,16 @@ def test_default_transport_maps_httpx_errors_to_transient():
     with pytest.raises(TransientAdapterError):
         ax._default_transport(ax.IOP_GATEWAY, {"method": "x"}, client_factory=factory)
 
+    def ok(request):
+        return httpx.Response(200, text='{"ok": true}')
+
+    status, body = ax._default_transport(
+        ax.IOP_GATEWAY, {"m": "x"}, client_factory=lambda **kw: httpx.Client(
+            transport=httpx.MockTransport(ok))
+    )
+    assert status == 200 and body == '{"ok": true}'
+
+
 
 def test_registry_returns_aliexpress_adapter():
     adapter = get_adapter(
@@ -318,3 +328,39 @@ def test_biz_error_still_logged_with_body():
     with pytest.raises(PermanentAdapterError) as err:
         adapter.search_products("x")
     assert "biz error 401" in str(err.value)
+
+
+# --- THE go-live incident, regression-locked ------------------------------------------
+
+
+def test_empty_resp_result_envelope_raises_with_raw_body():
+    """HTTP 200 + wrapper + resp_result:{} previously printed 'biz error
+    None: None'. Now: Permanent error embedding http status + raw body."""
+    adapter, _ = make_adapter(
+        lambda form: json.dumps(
+            {"aliexpress_affiliate_product_query_response": {"resp_result": {}}}
+        )
+    )
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.search_products("x")
+    message = str(err.value)
+    assert "empty resp_result envelope" in message
+    assert "http 200" in message and "body=" in message
+
+
+def test_non_200_status_carries_code_and_body():
+    def transport(url, form):
+        return 403, '{"message":"IP not allowed"}'
+    adapter = ax.AliExpressAdapter(APP_KEY, APP_SECRET, TRACKING_ID, transport=transport)
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.search_products("x")
+    assert "http 403" in str(err.value) and "IP not allowed" in str(err.value)
+
+
+def test_5xx_status_is_transient_with_body():
+    def transport(url, form):
+        return 502, "Bad Gateway"
+    adapter = ax.AliExpressAdapter(APP_KEY, APP_SECRET, TRACKING_ID, transport=transport)
+    with pytest.raises(TransientAdapterError) as err:
+        adapter.build_affiliate_url("https://x/item/1.html")
+    assert "http 502" in str(err.value)

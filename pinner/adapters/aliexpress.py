@@ -47,7 +47,7 @@ API_VERSION = "2.0"
 # IOP error codes that mean "slow down / try again later" (traffic limiting).
 TRANSIENT_IOP_CODES = {20000000}
 
-Transport = Callable[[str, dict[str, str]], str]
+Transport = Callable[[str, dict[str, str]], "tuple[int, str]"]
 
 
 def sign_md5(app_secret: str, params: dict[str, str]) -> str:
@@ -81,12 +81,17 @@ def _default_transport(
     form: dict[str, str],
     *,
     client_factory: Callable[..., httpx.Client] = httpx.Client,
-) -> str:
+) -> tuple[int, str]:
+    """Returns (HTTP status, body). Status flows into every error message —
+    ALIEXPRESS_PROXY_URL (http/https/socks5) routes via a proxy egress for
+    IP-restriction diagnosis/workarounds."""
+    import os
+
+    proxy = os.environ.get("ALIEXPRESS_PROXY_URL") or None
     try:
-        with client_factory(timeout=20.0) as client:
+        with client_factory(timeout=20.0, proxy=proxy) as client:
             response = client.post(url, data=form)
-            response.raise_for_status()
-            return response.text
+            return response.status_code, response.text
     except httpx.HTTPError as exc:
         raise TransientAdapterError("aliexpress", f"http transport failed: {exc}") from exc
 
@@ -193,14 +198,22 @@ class AliExpressAdapter:
         for key, value in business_params.items():
             form[key] = _to_form_value(value)
         form["sign"] = sign_md5(self._app_secret, form)
-        return self._parse(method, self._transport(self._base_url, form))
+        status, body = self._transport(self._base_url, form)
+        return self._parse(method, status, body)
 
-    def _parse(self, method: str, text: str) -> dict:
+    def _parse(self, method: str, status: int, text: str) -> dict:
+        if status != 200:
+            snippet = _raw_snippet(text)
+            message = f"http {status} (body={snippet})"
+            logger.warning("[aliexpress] %s for %s", message, method)
+            if status >= 500 or status == 429:
+                raise TransientAdapterError("aliexpress", message)
+            raise PermanentAdapterError("aliexpress", message)
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:
             raise TransientAdapterError(
-                "aliexpress", f"non-JSON gateway response: {text[:120]!r}"
+                "aliexpress", f"non-JSON gateway response (http {status}): {text[:120]!r}"
             ) from exc
         if "error_response" in payload:
             err = payload["error_response"] or {}
@@ -213,16 +226,17 @@ class AliExpressAdapter:
         resp = payload.get(wrapper)
 
         def reject(kind: str) -> PermanentAdapterError:
-            """Opaque responses MUST surface the raw body — empty biz errors
-            ("biz error None: None") are unw diagnosable garbage."""
+            """Opaque responses MUST surface status + raw body — the go-live
+            incident ("biz error None: None") was an empty resp_result dict
+            with zero diagnostics. Never again."""
             detail = _error_fields(payload) or "no recognizable fields"
             logger.warning(
-                "[aliexpress] %s for %s | raw body: %s",
-                kind, method, _raw_snippet(text),
+                "[aliexpress] http %s | %s for %s | raw body: %s",
+                status, kind, method, _raw_snippet(text),
             )
             return PermanentAdapterError(
                 "aliexpress",
-                f"{kind} (body={_raw_snippet(text, 220)}; fields={detail})",
+                f"{kind} [http {status}] (body={_raw_snippet(text, 220)}; {detail})",
             )
 
         if not isinstance(resp, dict):
@@ -232,6 +246,11 @@ class AliExpressAdapter:
 
         # Shape A (documented): {resp_result:{code,msg,result}}
         if isinstance(resp_result, dict):
+            if not resp_result:
+                # THE go-live incident: HTTP 200, wrapper found, resp_result
+                # present but EMPTY — gateway-level rejection (signature, IP,
+                # or app authorization). Raw body must surface, not None: None.
+                raise reject("empty resp_result envelope")
             code = resp_result.get("code")
             if code not in (200, 0):
                 biz = f"biz error {code}: {resp_result.get('msg')}"
