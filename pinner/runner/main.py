@@ -39,6 +39,7 @@ from pinner.adapters.base import (
 from pinner.agents import DEFAULT_MODEL, Moderator, Strategist
 from pinner.agents.guardrails import GuardrailError
 from pinner.agents.schemas import ModerationVerdict
+from pinner.crypto.tokens import TokenDecryptionError
 from pinner.errors import PermanentError as ToolPermanentError
 from pinner.errors import TransientError as ToolTransientError
 from pinner.governor.quotas import bump_pin_stats, decide, should_graduate
@@ -316,7 +317,9 @@ class Runner:
             if not self.cfg.dry_run:
                 try:
                     self.deps.token_store.access_token(account_id)
-                except KeyError as exc:
+                except (KeyError, TokenDecryptionError) as exc:
+                    # Missing OR corrupted credentials: isolate this account,
+                    # alert loudly, never block the other niches.
                     self.stats["accounts_without_tokens"] = (
                         self.stats.get("accounts_without_tokens", 0) + 1
                     )
@@ -526,6 +529,41 @@ class Runner:
         if s.get("critical_errors"):
             lines.append("CRITICAL errors occurred — check runs collection")
         self.deps.telegram("\n".join(lines))
+
+
+def build_runner_args(inputs: dict) -> list[str]:
+    """Translate GitHub workflow inputs into runner CLI args.
+
+    Dispatch-semantics truth table (unit-tested in test_qa_audit.py):
+      * scheduled runs send NO inputs -> live (no --dry-run),
+      * manual dry_run=true/True/true-string -> --dry-run,
+      * manual dry_run=false -> live override honored,
+      * fetch_budget passes through verbatim when provided.
+    """
+    if not isinstance(inputs, dict):
+        inputs = {}
+    args: list[str] = []
+    raw_dry = inputs.get("dry_run")
+    is_dry = raw_dry is True or (isinstance(raw_dry, str) and raw_dry.strip().lower() == "true")
+    if is_dry:
+        args.append("--dry-run")
+    budget = inputs.get("fetch_budget")
+    if budget not in (None, "", False):
+        args += ["--fetch-budget", str(budget)]
+    return args
+
+
+def cli_from_env() -> int:
+    """Workflow entrypoint: reads toJSON(inputs) from RUNNER_INPUTS env so
+    cron-vs-dispatch behavior lives in ONE tested place instead of bash."""
+    import json
+    import os
+
+    try:
+        inputs = json.loads(os.environ.get("RUNNER_INPUTS") or "{}")
+    except json.JSONDecodeError:
+        inputs = {}
+    return main(build_runner_args(inputs))
 
 
 def _to_oid(value):

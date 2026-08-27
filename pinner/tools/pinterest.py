@@ -92,7 +92,12 @@ def refresh_access_token(
 def download_image(url: str, *, transport: Transport | None = None) -> bytes:
     """Fetch product image bytes for multipart upload (never hotlink)."""
     transport = transport or httpx_transport
-    reply = transport("GET", url)
+    try:
+        reply = transport("GET", url)
+    except PermanentError:
+        raise
+    except Exception as exc:  # httpx timeouts / egress drops from any transport
+        raise TransientError(f"[pinterest] image fetch failed: {exc}") from exc
     if reply.status != 200:
         _raise(reply.status, f"download image {url[:60]}")
     if not reply.body:

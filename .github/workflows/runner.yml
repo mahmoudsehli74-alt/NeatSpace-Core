@@ -59,8 +59,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           AGENT_MODEL: ${{ vars.AGENT_MODEL }}
+          RUNNER_INPUTS: ${{ toJSON(inputs) }}
         run: |
-          ARGS=""
-          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          ARGS="$ARGS --fetch-budget ${{ inputs.fetch_budget || '5' }}"
-          python -m pinner.runner.main $ARGS
+          # Cron-vs-dispatch semantics live in build_runner_args (tested):
+          # scheduled runs carry no inputs -> LIVE automatically.
+          python -c "from pinner.runner.main import cli_from_env; raise SystemExit(cli_from_env())" 
