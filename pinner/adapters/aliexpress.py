@@ -130,6 +130,19 @@ def _split_images(raw_images: Any, fallback: Any = None) -> list[str]:
     return urls
 
 
+def _unwrap_collection(node) -> list:
+    """IOP collections arrive EITHER as a plain list [...] OR wrapped as a
+    singular-keyed object {"product": [...]} (verified live: products is
+    products.product, total_record_count 65244). Accept both."""
+    if isinstance(node, list):
+        return node
+    if isinstance(node, dict):
+        for value in node.values():
+            if isinstance(value, list):
+                return value
+    return []
+
+
 def normalize_product(item: dict) -> RawProduct:
     """Map an AliExpress product payload to the products.raw contract.
     Tolerates field drift (target_* vs plain price keys, sales_count vs
@@ -252,7 +265,12 @@ class AliExpressAdapter:
                 # or app authorization). Raw body must surface, not None: None.
                 raise reject("empty resp_result envelope")
             code = resp_result.get("code")
-            if code not in (200, 0):
+            has_result = bool(resp_result.get("result"))
+            # Error ONLY on an EXPLICIT non-zero code, or when result is
+            # entirely missing. Verified live: the current API generation
+            # omits resp_result.code on success — code=None + result present
+            # is a VALID response, not "biz error None: None".
+            if code is not None and code not in (200, 0):
                 biz = f"biz error {code}: {resp_result.get('msg')}"
                 logger.warning(
                     "[aliexpress] %s for %s | raw body: %s", biz, method, _raw_snippet(text)
@@ -260,6 +278,8 @@ class AliExpressAdapter:
                 if code in TRANSIENT_IOP_CODES:
                     raise TransientAdapterError("aliexpress", biz)
                 raise PermanentAdapterError("aliexpress", biz)
+            if code is None and not has_result:
+                raise reject("resp_result has neither code nor result")
             result = resp_result.get("result") or {}
         elif resp_result is None:
             # Shape B tolerated: some IOP deployments nest result directly
@@ -296,7 +316,7 @@ class AliExpressAdapter:
                 "page_size": max(1, min(max_results, 50)),
             },
         )
-        items = result.get("products") or []
+        items = _unwrap_collection(result.get("products"))
         candidates = []
         for item in items:
             product_id = str(item.get("product_id") or "")
@@ -325,7 +345,10 @@ class AliExpressAdapter:
                 "target_language": "EN",
             },
         )
-        item = result.get("product_detail") or (result.get("products") or [None])[0]
+        item = result.get("product_detail")
+        if item is None:
+            items = _unwrap_collection(result.get("products"))
+            item = items[0] if items else None
         if not isinstance(item, dict) or not item:
             raise PermanentAdapterError(
                 "aliexpress", f"product not found: {candidate.source_product_id}"
@@ -344,7 +367,7 @@ class AliExpressAdapter:
                 "tracking_id": self._tracking_id,
             },
         )
-        links = result.get("promotion_links") or []
+        links = _unwrap_collection(result.get("promotion_links"))
         url = (links[0] or {}).get("promotion_link") if links else None
         if not url:
             raise PermanentAdapterError(

@@ -364,3 +364,102 @@ def test_5xx_status_is_transient_with_body():
     with pytest.raises(TransientAdapterError) as err:
         adapter.build_affiliate_url("https://x/item/1.html")
     assert "http 502" in str(err.value)
+
+
+# --- VERIFIED LIVE STRUCTURE (probe, total_record_count=65244) ---------------------
+# resp_result carries NO code; products arrive wrapped as products.product.
+
+
+def _live_query_body(item=PRODUCT_ITEM) -> dict:
+    return {
+        "aliexpress_affiliate_product_query_response": {
+            "resp_result": {
+                "result": {
+                    "products": {"product": [item]},
+                    "total_record_count": 65244,
+                    "current_page": 1,
+                    "total_page": 6524,
+                }
+            }
+        }
+    }
+
+
+def test_live_shape_no_code_with_result_is_success():
+    """THE inaugural-cycle blocker: code absent + result present previously
+    formatted 'biz error None: None'. Now it parses candidates normally."""
+    adapter, _ = make_adapter(lambda form: json.dumps(_live_query_body()))
+    candidates = adapter.search_products("kitchen organizer", max_results=5)
+    assert len(candidates) == 1
+    assert candidates[0].source_product_id == "1005006123456789"
+    assert candidates[0].title == "Stainless Sink Caddy Organizer"
+
+
+def test_live_shape_wrapped_product_detail():
+    body = {
+        "aliexpress_affiliate_productdetail_get_response": {
+            "resp_result": {"result": {"product_detail": PRODUCT_ITEM}}
+        }
+    }
+    adapter, _ = make_adapter(lambda form: json.dumps(body))
+    raw = adapter.get_product_details(
+        CandidateProduct(
+            source="aliexpress", source_product_id="1005006123456789", title="x",
+            image_url=None, product_url="https://www.aliexpress.com/item/1.html",
+        )
+    )
+    assert raw["price"]["current"] == 14.99
+
+
+def test_live_shape_wrapped_product_detail_via_products_key():
+    body = {
+        "aliexpress_affiliate_productdetail_get_response": {
+            "resp_result": {"result": {"products": {"product": [PRODUCT_ITEM]}}}
+        }
+    }
+    adapter, _ = make_adapter(lambda form: json.dumps(body))
+    raw = adapter.get_product_details(
+        CandidateProduct(
+            source="aliexpress", source_product_id="1005006123456789", title="x",
+            image_url=None, product_url="https://www.aliexpress.com/item/1.html",
+        )
+    )
+    assert raw["title"] == "Stainless Sink Caddy Organizer"
+
+
+def test_live_shape_wrapped_promotion_links():
+    body = {
+        "aliexpress_affiliate_link_generate_response": {
+            "resp_result": {
+                "result": {"promotion_links": {"promotion_link": [
+                    {"promotion_link": "https://s.click.aliexpress.com/e/_WRAP"}
+                ]}}
+            }
+        }
+    }
+    adapter, _ = make_adapter(lambda form: json.dumps(body))
+    assert adapter.build_affiliate_url("https://x/item/1.html").endswith("_WRAP")
+
+
+def test_no_code_and_no_result_still_rejected_with_body():
+    body = {
+        "aliexpress_affiliate_product_query_response": {
+            "resp_result": {"something_else": 1}
+        }
+    }
+    adapter, _ = make_adapter(lambda form: json.dumps(body))
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.search_products("x")
+    assert "neither code nor result" in str(err.value) and "body=" in str(err.value)
+
+
+def test_legacy_list_shapes_still_parse():
+    """Backward tolerance: our original fixtures (products as plain list,
+    promotion_links as plain list, resp_result.code=200) remain supported."""
+    adapter, _ = make_adapter(
+        lambda form: _ok(
+            "aliexpress.affiliate.product.query",
+            {"products": [PRODUCT_ITEM], "total_results": 57},
+        )
+    )
+    assert len(adapter.search_products("x")) == 1
