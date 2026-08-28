@@ -597,3 +597,41 @@ def test_runner_fetch_passes_product_id_for_synthesis():
 
     source = inspect.getsource(runner_main)
     assert 'product_id=claimed["source_product_id"]' in source
+
+
+# --- payload-drift extraction hardening (live smoke: details incomplete) -----------
+
+
+def test_images_from_product_main_image_url_variant():
+    """Live smoke incident: images under product_main_image_url instead of
+    the documented images key must still resolve."""
+    item = dict(PRODUCT_ITEM)
+    del item["images"], item["product_image_url"]
+    item["product_main_image_url"] = "https://ae01.alicdn.com/kf/MAIN.jpg"
+    raw = ax.normalize_product(item)
+    assert raw["images"] == ["https://ae01.alicdn.com/kf/MAIN.jpg"]
+
+
+def test_images_from_small_image_urls_string_wrapper():
+    item = dict(PRODUCT_ITEM)
+    del item["images"], item["product_image_url"]
+    item["product_small_image_urls"] = {"string": ["https://ae01.alicdn.com/kf/S1.jpg",
+                                                   "https://ae02.alicdn.com/kf/S2.jpg"]}
+    raw = ax.normalize_product(item)
+    assert raw["images"] == ["https://ae01.alicdn.com/kf/S1.jpg",
+                             "https://ae02.alicdn.com/kf/S2.jpg"]
+
+
+def test_title_falls_back_to_subject_field():
+    item = dict(PRODUCT_ITEM)
+    del item["product_title"]
+    item["subject"] = "A Different Title Source"
+    assert ax.normalize_product(item)["title"] == "A Different Title Source"
+
+
+def test_no_images_yields_empty_list_not_crash():
+    item = dict(PRODUCT_ITEM)
+    for key in ("images", "product_image_url", "product_main_image_url"):
+        item.pop(key, None)
+    raw = ax.normalize_product(item)
+    assert raw["images"] == []          # downstream skips malformed candidates

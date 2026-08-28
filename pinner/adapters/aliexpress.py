@@ -118,8 +118,33 @@ def _money(value: Any) -> tuple[float | None, str | None]:
         return None, None
 
 
+_IMAGE_KEYS = (
+    "images",                      # canonical (documented)
+    "product_image_url",           # single main image
+    "product_main_image_url",      # observed live variant
+    "image_urls",                  # list variant
+    "product_small_image_urls",    # {"string": [...]} wrapper
+)
+
+
+def extract_images(item: dict) -> list[str]:
+    """First usable image set across every key shape AliExpress has been
+    observed using. Returns [] when none resolve."""
+    for key in _IMAGE_KEYS:
+        if key in item and item[key]:
+            resolved = _split_images(item[key])
+            if resolved:
+                return resolved
+    return []
+
+
 def _split_images(raw_images: Any, fallback: Any = None) -> list[str]:
-    blob = raw_images or fallback or ""
+    blob = raw_images if raw_images not in (None, "", [], {}) else (fallback or "")
+    if isinstance(blob, dict):
+        # {"string": ["url", ...]} wrapper shape
+        blob = next(
+            (v for v in blob.values() if isinstance(v, list)), []
+        )
     if isinstance(blob, list):
         parts = [str(u) for u in blob]
     else:
@@ -196,10 +221,11 @@ def normalize_product(item: dict) -> RawProduct:
     shop_name = item.get("shop_name") or (
         f"shop-{item['shop_id']}" if item.get("shop_id") else "unknown-shop"
     )
+    title = (item.get("product_title") or item.get("subject") or "").strip()
     return {
-        "title": (item.get("product_title") or "").strip(),
-        "description": (item.get("product_title") or "")[:1000],
-        "images": _split_images(item.get("images"), item.get("product_image_url")),
+        "title": title,
+        "description": title[:1000],
+        "images": extract_images(item) or _split_images(None, item.get("product_image_url")),
         "price": {
             "current": sale,
             "currency": currency or "USD",

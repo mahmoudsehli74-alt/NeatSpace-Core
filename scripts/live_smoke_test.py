@@ -75,17 +75,41 @@ def main() -> int:
         tracking_id=settings.aliexpress_tracking_id,
     )
     t0 = time.time()
-    candidates = adapter.search_products(args.keywords, max_results=3)
+    candidates = adapter.search_products(args.keywords, max_results=5)
     if not candidates:
         print("!! empty result — aborting")
         return 1
-    cand = candidates[0]
     print(f"{STEP} {len(candidates)} candidates in {time.time() - t0:.1f}s")
-    print(f"{STEP} chosen: {cand.source_product_id} — {cand.title[:60]}")
 
-    raw = adapter.get_product_details(cand)
-    assert raw["title"] and raw["images"], "details incomplete"
-    print(f"{STEP} details: price={raw['price'].get('current')} images={len(raw['images'])}")
+    # DEFENSIVE EXTRACTION: try each candidate until one yields a usable
+    # (title + images) payload. Vendor drift on one listing must never kill
+    # the smoke run — it warns, dumps raw keys for forensics, and moves on.
+    cand, raw = None, None
+    for index, candidate in enumerate(candidates):
+        try:
+            probe = adapter.get_product_details(candidate)
+        except Exception as exc:
+            print(f"{STEP} candidate {index} ({candidate.source_product_id}) "
+                  f"fetch failed: {type(exc).__name__}: {str(exc)[:120]} — skipping")
+            continue
+        title = (probe.get("title") or "").strip()
+        images = [u for u in (probe.get("images") or [])
+                  if isinstance(u, str) and u.startswith("http")]
+        if not title or not images:
+            print(f"{STEP} candidate {index} ({candidate.source_product_id}) "
+                  f"malformed (title={'ok' if title else 'MISSING'}, "
+                  f"images={len(images)}) — raw keys: {sorted(probe.keys())} — skipping")
+            continue
+        cand, raw = candidate, probe
+        print(f"{STEP} candidate {index} accepted: {cand.source_product_id} — "
+              f"{cand.title[:60]}")
+        break
+    if cand is None:
+        print("!! no usable candidate in this batch — payload keys were dumped "
+              "above for schema forensics; retry with different --keywords")
+        return 1
+    print(f"{STEP} details: price={raw['price'].get('current')} "
+          f"images={len(raw['images'])}")
 
     # ── 2. affiliate link ───────────────────────────────────────────────
     banner("2. AFFILIATE LINK (live IOP link.generate)")
@@ -94,7 +118,9 @@ def main() -> int:
         raw["source_url"] or cand.product_url, product_id=cand.source_product_id
     )
     print(f"{STEP} {affiliate_url}  ({time.time() - t0:.1f}s)")
-    assert affiliate_url.startswith("https://"), "affiliate link not https"
+    if not affiliate_url.startswith("https://"):
+        print("!! affiliate link is not https — invalid for Pinterest")
+        return 1
 
     # ── 3. moderation (live, if key present) ────────────────────────────
     banner("3. GEMINI MODERATION (live)")
@@ -121,9 +147,12 @@ def main() -> int:
     print(f"{STEP} downloaded {len(image_bytes)} bytes")
     vertical = to_vertical(image_bytes)
     w, h = Image.open(io.BytesIO(vertical)).size
+    ratio_ok = abs(w / h - 2 / 3) < 0.02
     print(f"{STEP} composited {w}x{h} (ratio {w / h:.3f}, target 0.667) "
           f"-> {len(vertical)} bytes")
-    assert abs(w / h - 2 / 3) < 0.02
+    if not ratio_ok:
+        print("!! compositor produced non-2:3 output")
+        return 1
 
     # ── 5. bridge commit (live) ─────────────────────────────────────────
     banner("5. BRIDGE COMMIT (live GitHub Contents API)")
