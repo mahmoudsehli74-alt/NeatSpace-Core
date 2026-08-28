@@ -1,0 +1,21 @@
+{
+  "run_tag": "smoke-20260828-195841-47ab72",
+  "stages": {
+    "account": {
+      "ok": true,
+      "account": "NeatSpace Kitchen",
+      "repo": "mahmoudsehli74-alt/neatspace-kitchen",
+      "domain": "neatspace-kitchen.github.io"
+    },
+    "discover": {
+      "ok": true,
+      "product_id": "3256809692036148",
+      "title": "Capybara Bento Lunch Box Anime Animals Print Food Storage Containers Kids School Picnic Lunchbox Boys Girls Office Dinne"
+    }
+  },
+  "pin_url": null,
+  "destination": null,
+  "ok": false,
+  "started": 1787947121.0757394,
+  "updated": 1787947126.043465
+}
