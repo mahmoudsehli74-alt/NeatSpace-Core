@@ -49,3 +49,16 @@ def test_live_apis_and_secrets_wired():
         assert secret in env_block, f"{secret} missing"
     assert "concurrency:\n  group: live-smoke" in text
     assert "timeout-minutes: 15" in text
+
+
+def test_push_trigger_and_atlas_persistence():
+    """Autonomous iteration contract: push to main triggers the live smoke,
+    and the script persists stage evidence to Atlas (smoke_reports) so the
+    engineer can read results without Actions log access."""
+    text = yaml_text()
+    assert "branches: [main]" in text and "workflow_dispatch:" in text
+    script = (WORKFLOW.parent.parent.parent / "scripts" / "live_smoke_test.py").read_text(
+        encoding="utf-8")
+    assert "smoke_reports" in script
+    assert "class StageReport" in script
+    assert "report.finish(ok=True, pin_url=" in script

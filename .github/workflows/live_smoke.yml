@@ -4,6 +4,8 @@
 name: Live Smoke Test
 
 on:
+  push:
+    branches: [main]        # every push to main = autonomous live iteration
   workflow_dispatch:
     inputs:
       account:

@@ -38,6 +38,42 @@ def banner(title: str) -> None:
     print(f"\n{'=' * 62}\n {title}\n{'=' * 62}")
 
 
+class StageReport:
+    """Persists per-stage evidence to Atlas (smoke_reports) so autonomous
+    iteration can read live results without Actions log access."""
+
+    def __init__(self, db, run_tag: str) -> None:
+        self.db = db
+        self.doc = {"run_tag": run_tag, "stages": {}, "pin_url": None,
+                    "destination": None, "ok": False, "started": time.time()}
+
+    def record(self, stage: str, **fields) -> None:
+        self.doc["stages"][stage] = {"ok": True, **fields}
+        self._flush()
+
+    def fail(self, stage: str, error: str, **fields) -> None:
+        self.doc["stages"][stage] = {"ok": False, "error": str(error)[:600], **fields}
+        self.doc["ok"] = False
+        self._flush()
+
+    def finish(self, *, ok: bool, pin_url: str | None = None,
+               destination: str | None = None) -> None:
+        self.doc["ok"] = ok
+        self.doc["pin_url"] = pin_url
+        self.doc["destination"] = destination
+        self.doc["finished"] = time.time()
+        self._flush()
+
+    def _flush(self) -> None:
+        try:
+            self.doc["updated"] = time.time()
+            self.db.smoke_reports.update_one(
+                {"run_tag": self.doc["run_tag"]}, {"$set": self.doc}, upsert=True
+            )
+        except Exception:  # reporting must never kill the run
+            pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="One-item LIVE pipeline smoke test")
     parser.add_argument("--account", default=None, help="account name (default: first with token)")
@@ -51,6 +87,10 @@ def main() -> int:
 
     settings = load_settings()
     db = get_client(settings.mongo_uri)[args.db or settings.mongo_db]
+    import uuid
+
+    report = StageReport(db, f"smoke-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}")
+    print(f"{STEP} report tag: {report.doc['run_tag']}")
 
     # ── 0. account selection ────────────────────────────────────────────
     banner("0. ACCOUNT")
@@ -66,6 +106,7 @@ def main() -> int:
     domain = account["site"].get("custom_domain") or f"{repo.split('/')[-1].lower()}.github.io"
     print(f"{STEP} account: {account['name']}")
     print(f"{STEP} repo: {repo} | domain: {domain}")
+    report.record("account", account=account["name"], repo=repo, domain=domain)
 
     # ── 1. discover ─────────────────────────────────────────────────────
     banner("1. ALIEXPRESS DISCOVERY (live)")
@@ -75,9 +116,15 @@ def main() -> int:
         tracking_id=settings.aliexpress_tracking_id,
     )
     t0 = time.time()
-    candidates = adapter.search_products(args.keywords, max_results=5)
+    try:
+        candidates = adapter.search_products(args.keywords, max_results=5)
+    except Exception as exc:
+        print(f"!! discovery failed: {exc}")
+        report.fail("discover", str(exc))
+        return 1
     if not candidates:
         print("!! empty result — aborting")
+        report.fail("discover", "empty result")
         return 1
     print(f"{STEP} {len(candidates)} candidates in {time.time() - t0:.1f}s")
 
@@ -107,7 +154,9 @@ def main() -> int:
     if cand is None:
         print("!! no usable candidate in this batch — payload keys were dumped "
               "above for schema forensics; retry with different --keywords")
+        report.fail("extract", "no usable candidate in batch")
         return 1
+    report.record("discover", product_id=cand.source_product_id, title=cand.title[:120])
     print(f"{STEP} details: price={raw['price'].get('current')} "
           f"images={len(raw['images'])}")
 
@@ -120,7 +169,9 @@ def main() -> int:
     print(f"{STEP} {affiliate_url}  ({time.time() - t0:.1f}s)")
     if not affiliate_url.startswith("https://"):
         print("!! affiliate link is not https — invalid for Pinterest")
+        report.fail("affiliate", f"non-https link: {affiliate_url[:120]}")
         return 1
+    report.record("affiliate", affiliate_url=affiliate_url)
 
     # ── 3. moderation (live, if key present) ────────────────────────────
     banner("3. GEMINI MODERATION (live)")
@@ -133,9 +184,13 @@ def main() -> int:
               f"reasons={verdict.reasons}")
         if verdict.verdict != "APPROVE":
             print("!! product rejected by live moderation — smoke result: VALID (pipeline correct)")
+            report.record("moderation", verdict=verdict.verdict)
+            report.finish(ok=True)
             return 0
+        report.record("moderation", verdict=verdict.verdict)
     else:
         print(f"{STEP} skipped (no GEMINI_API_KEY)")
+        report.record("moderation", skipped=True)
 
     # ── 4. image: real download + 2:3 ───────────────────────────────────
     banner("4. IMAGE PIPELINE (live download + 2:3 compositor)")
@@ -152,7 +207,9 @@ def main() -> int:
           f"-> {len(vertical)} bytes")
     if not ratio_ok:
         print("!! compositor produced non-2:3 output")
+        report.fail("image", f"ratio {w / h:.3f}")
         return 1
+    report.record("image", width=w, height=h, source_bytes=len(image_bytes))
 
     # ── 5. bridge commit (live) ─────────────────────────────────────────
     banner("5. BRIDGE COMMIT (live GitHub Contents API)")
@@ -181,6 +238,8 @@ def main() -> int:
     print(f"{STEP} deployed({json_url}): {deployed}")
     bridge_url = f"https://{domain}/?id={product_key}"
     print(f"{STEP} DESTINATION: {bridge_url}")
+    report.record("bridge", commit_sha=commit["commit_sha"], json_url=json_url,
+                  deployed=deployed, destination=bridge_url)
 
     if args.skip_pin:
         print("\nSMOKE OK (bridge-only mode)")
@@ -202,6 +261,7 @@ def main() -> int:
         boards = tool.list_boards()
         if not boards:
             print("!! account has no boards — create one on Pinterest first")
+            report.fail("pin", "account has no boards")
             return 1
         board_id, board_name = boards[0]["id"], boards[0]["name"]
     else:
@@ -228,8 +288,18 @@ def main() -> int:
     print(f"  destination : {bridge_url}")
     print(f"  affiliate   : {affiliate_url}")
     print(f"{'=' * 62}")
+    report.finish(ok=True, pin_url=pin["url"], destination=bridge_url)
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        code = main()
+    except SystemExit:
+        raise
+    except Exception:  # last-resort: keep smoke_reports authoritative
+        import traceback
+
+        traceback.print_exc()
+        code = 1
+    raise SystemExit(code)
