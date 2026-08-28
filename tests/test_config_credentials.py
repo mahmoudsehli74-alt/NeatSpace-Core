@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from pinner.config import missing_credentials, require_credentials
@@ -21,7 +23,10 @@ def settings(monkeypatch):
     monkeypatch.setenv("TOKEN_MASTER_KEY", "ab" * 32)
     from pinner.config import load_settings
 
-    return load_settings()
+    # HERMETIC: nonexistent env_file prevents load_dotenv from pulling the
+    # real production .env — these tests must pass on a secrets-free box
+    # AND on the live operator machine alike.
+    return load_settings(env_file=Path("__definitely_missing__.env"))
 
 
 def test_aliexpress_missing_names_are_listed(settings):
@@ -48,7 +53,7 @@ def test_require_credentials_passes_when_present(settings, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "g")
     from pinner.config import load_settings
 
-    fresh = load_settings()
+    fresh = load_settings(env_file=Path("__definitely_missing__.env"))
     require_credentials(fresh, "aliexpress", "gemini")  # no raise
 
 
@@ -60,7 +65,7 @@ def test_dry_run_does_not_require_pinterest(settings, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "g")
     from pinner.config import load_settings
 
-    fresh = load_settings()
+    fresh = load_settings(env_file=Path("__definitely_missing__.env"))
     require_credentials(fresh, "aliexpress", "gemini")  # ok without pinterest
     with pytest.raises(RuntimeError):
         require_credentials(fresh, "pinterest")

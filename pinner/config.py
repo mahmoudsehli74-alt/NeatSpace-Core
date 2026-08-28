@@ -9,7 +9,7 @@ application layer; see pinner/crypto/tokens.py, WP6).
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
@@ -32,20 +32,22 @@ CREDENTIAL_REQUIREMENTS = {
 
 @dataclass(frozen=True)
 class Settings:
-    mongo_uri: str
+    mongo_uri: str = field(repr=False)
     mongo_db: str
-    token_master_key: str
+    # Every credential below is repr=False: Settings must never leak secrets
+    # into logs, CI assertion dumps, or crash traces.
+    token_master_key: str = field(repr=False)
 
     # Populated from Phase 2 onward — kept here so the contract is frozen once.
-    gemini_api_key: str = ""
-    aliexpress_app_key: str = ""
-    aliexpress_app_secret: str = ""
-    aliexpress_tracking_id: str = ""
-    bridge_pat: str = ""
-    pinterest_app_id: str = ""
-    pinterest_app_secret: str = ""
-    telegram_bot_token: str = ""
-    telegram_chat_id: str = ""
+    gemini_api_key: str = field(default="", repr=False)
+    aliexpress_app_key: str = field(default="", repr=False)
+    aliexpress_app_secret: str = field(default="", repr=False)
+    aliexpress_tracking_id: str = field(default="", repr=False)
+    bridge_pat: str = field(default="", repr=False)
+    pinterest_app_id: str = field(default="", repr=False)
+    pinterest_app_secret: str = field(default="", repr=False)
+    telegram_bot_token: str = field(default="", repr=False)
+    telegram_chat_id: str = field(default="", repr=False)
 
 
 def _load_env_file(explicit: Path | None) -> None:
