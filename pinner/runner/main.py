@@ -75,6 +75,7 @@ class RunnerConfig:
     fetch_budget: int = 10
     moderation_budget: int = 10
     pins_per_account: int = 2
+    daily_cap_override: int | None = None  # EXPLICIT warm-up bypass (launch)
 
 
 def _landing_payload(product: dict, content: dict, product_key: str) -> dict:
@@ -116,6 +117,7 @@ class Runner:
         self.products = ProductsRepo(db)
         self.pins = PinsRepo(db)
         self.stats: dict[str, int] = defaultdict(int)
+        self.pins_created: list[dict] = []  # per-pin launch evidence
 
     def now(self) -> datetime:
         return self._now_value or utcnow()
@@ -173,7 +175,8 @@ class Runner:
         finally:
             self.db.runs.update_one(
                 {"run_id": self.run_id},
-                {"$set": {"finished_at": utcnow(), "stats": dict(self.stats)}},
+                {"$set": {"finished_at": utcnow(), "stats": dict(self.stats),
+                          "pins_created": self.pins_created}},
             )
         self._send_digest()
         return dict(self.stats)
@@ -336,7 +339,8 @@ class Runner:
             while pins_done < self.cfg.pins_per_account:
                 fresh = self.db.accounts.find_one({"_id": account["_id"]})
                 decision = decide(
-                    fresh, now=self.now(), gemini_calls_today=self._gemini_calls_today()
+                    fresh, now=self.now(), gemini_calls_today=self._gemini_calls_today(),
+                    cap_override=self.cfg.daily_cap_override,
                 )
                 if not decision.allowed:
                     self.stats["governor_blocks"] += 1
@@ -398,9 +402,30 @@ class Runner:
         elif status == "VERIFYING":
             self._stage_verify(pin_doc)
 
+    def _covered_boards(self, account_id: str) -> set[str]:
+        """Board NAMES already carrying a live pin for this account."""
+        covered: set[str] = set()
+        for pin in self.db.pins.find(
+            {"account_id": account_id, "status": {"$in": ["VERIFIED", "PINNED"]}},
+            {"content.board_choice": 1, "pin.pin_id": 1},
+        ):
+            name = (pin.get("content") or {}).get("board_choice")
+            if name:
+                covered.add(name)
+        return covered
+
+    def _ordered_boards(self, account: dict) -> list[str]:
+        """Uncovered boards first — the launch allocator. The strategist is
+        nudged to the head of this list; _stage_pin enforces it if not."""
+        boards = [b.get("name", "") for b in (account.get("boards_cache") or [])]
+        if not boards:
+            return []
+        covered = self._covered_boards(str(account["_id"]))
+        return [b for b in boards if b not in covered] + [b for b in boards if b in covered]
+
     def _stage_enrich(self, pin_doc: dict, account: dict, niche: dict) -> None:
         product = self.db.products.find_one({"_id": pin_doc["product_id"]})
-        boards = [b.get("name", "") for b in (account.get("boards_cache") or [])]
+        boards = self._ordered_boards(account)
         self._count_gemini()
         content = self.deps.strategist.create((product or {}).get("raw") or {}, niche, boards)
         self.pins.transition(
@@ -468,6 +493,24 @@ class Runner:
                 f"board {content.get('board_choice')!r} not found on account "
                 f"{account.get('name')!r} (available: {sorted(boards)})"
             )
+        # LAUNCH GUARANTEE: 1 pin per board — if the strategist picked a
+        # board that already carries a pin and an uncovered board exists,
+        # reallocate (audited) so coverage completes.
+        covered = self._covered_boards(str(account["_id"]))
+        choice = content.get("board_choice", "")
+        uncovered = [n for n in self._ordered_boards(account) if n not in covered]
+        if choice in covered and uncovered:
+            from pinner.repo import audit as audit_mod
+
+            audit_mod.log(
+                self.db, run_id=self.run_id, entity="pins", entity_id=pin_doc["_id"],
+                event="BOARD_REALLOCATION", detail={"from": choice, "to": uncovered[0]},
+            )
+            choice = uncovered[0]
+            board_id = boards.get(choice)
+            if not board_id:
+                raise ToolPermanentError(f"reallocation board vanished: {choice!r}")
+
         tool = self._pinterest(account)
         existing = tool.find_pin_by_link(board_id, bridge_url)  # reconcile first
         if existing:
@@ -489,10 +532,19 @@ class Runner:
             pin_id = created["pin_id"]
         self.pins.transition(
             pin_doc["_id"], "PIN_OK",
-            patch={"pin": {"pin_id": pin_id, "url": f"https://www.pinterest.com/pin/{pin_id}/"}},
+            patch={"pin": {"pin_id": pin_id, "url": f"https://www.pinterest.com/pin/{pin_id}/"},
+                   "content": dict(content, board_choice=choice)},
             run_id=self.run_id, now=self.now(),
         )
         self.stats["pinned"] += 1
+        self.pins_created.append({
+            "account": account.get("name"),
+            "board": choice,
+            "board_id": board_id,
+            "pin_id": pin_id,
+            "pin_url": f"https://www.pinterest.com/pin/{pin_id}/",
+            "destination": bridge_url,
+        })
 
     def _stage_verify(self, pin_doc: dict) -> None:
         pin_id = pin_doc["pin"]["pin_id"]
@@ -526,6 +578,13 @@ class Runner:
         failures = s.get("fetch_failed", 0) + s.get("moderation_failed", 0) + s.get("pin_failed", 0)
         if failures:
             lines.append(f"failures={failures} (transient+permanent)")
+        if self.cfg.daily_cap_override:
+            lines.append(f"OVERRIDE: daily cap forced to {self.cfg.daily_cap_override}")
+        for entry in self.pins_created:
+            lines.append(
+                f"• [{entry['account']}] board={entry['board_id']} "
+                f"pin={entry['pin_id']} -> {entry['destination']}"
+            )
         if s.get("critical_errors"):
             lines.append("CRITICAL errors occurred — check runs collection")
         self.deps.telegram("\n".join(lines))
@@ -578,6 +637,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="full pipeline but Pinterest is never called")
     parser.add_argument("--fetch-budget", type=int, default=10)
     parser.add_argument("--pins-per-account", type=int, default=2)
+    parser.add_argument("--daily-cap-override", type=int, default=None,
+                        help="EXPLICIT warm-up bypass (launch only); logged loudly")
     parser.add_argument("--db", help="override MONGO_DB from the environment")
     args = parser.parse_args(argv)
 
@@ -587,6 +648,7 @@ def main(argv: list[str] | None = None) -> int:
     from pinner.agents import build_agents
     from pinner.config import load_settings, require_credentials
     from pinner.crypto.tokens import load_master_key
+    from pinner.imaging import to_vertical as _to_vertical
     from pinner.repo.mongo import get_client
     from pinner.tools.bridge import BridgeTool as _Bridge
     from pinner.tools.pinterest import PinterestTool as _Pinterest
@@ -634,12 +696,13 @@ def main(argv: list[str] | None = None) -> int:
         ),
         pinterest_factory=lambda token: _Pinterest(token),
         telegram=telegram,
-        image_fetcher=_download_image,
+        image_fetcher=lambda url: _to_vertical(_download_image(url)),
     )
     config = RunnerConfig(
         dry_run=args.dry_run,
         fetch_budget=args.fetch_budget,
         pins_per_account=args.pins_per_account,
+        daily_cap_override=args.daily_cap_override,
     )
     stats = Runner(db, deps, config=config).execute()
     print(json.dumps(stats, indent=2))

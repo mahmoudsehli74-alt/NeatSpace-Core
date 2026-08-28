@@ -92,6 +92,7 @@ def decide(
     last_pin_at: datetime | None = None,
     gemini_calls_today: int | None = None,
     gemini_rpd_budget: int = DEFAULT_GEMINI_RPD_BUDGET,
+    cap_override: int | None = None,
 ) -> Decision:
     """Allow or deny the next pin for this account, with the reason why."""
     now = now if now is not None else _utcnow()
@@ -105,13 +106,15 @@ def decide(
     if last_pin_at is None:
         last_pin_at = stats.get("last_pin_at")
 
-    cap = daily_cap(account, now)
+    cap = int(cap_override) if cap_override else daily_cap(account, now)
     detail = {
         "status": status,
         "warmup_day": warmup_day(account, now) if status == "WARMUP" else None,
         "cap": cap,
         "pins_today": pins_today,
     }
+    if cap_override:
+        detail["cap_override"] = cap_override  # explicit in every digest/audit
 
     if pins_today >= cap:
         return Decision(False, f"daily cap reached ({pins_today}/{cap})", detail)

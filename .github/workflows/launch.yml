@@ -1,0 +1,84 @@
+# ═══════════════════════════════════════════════════════════════════════
+# NeatSpace PRODUCTION LAUNCH orchestrator.
+#
+# Executes N spaced waves (25 min apart) of live runs. Each wave pins at
+# most ONCE per account (governor spacing), and the board-coverage
+# allocator fills one NEW board per wave — so waves=4 completes the
+# 4-board-per-account launch with 20-minute human-like cadence.
+#
+# ── SAFETY MODEL ────────────────────────────────────────────────────────
+# waves 1-2 (default 2): respects the day-1 warm-up cap (2 pins/account).
+# waves 3-4 REQUIRE boost=true, which passes --daily-cap-override 4 — an
+# EXPLICIT, loudly-logged warm-up bypass. The override stamps every
+# Telegram digest and runs doc ("OVERRIDE: daily cap forced to N").
+# Recommended: run waves=2 today, waves=2 tomorrow — zero override needed.
+# ═══════════════════════════════════════════════════════════════════════
+name: Production Launch
+
+on:
+  workflow_dispatch:
+    inputs:
+      waves:
+        description: "Waves (1 pin/account/wave, 25 min apart)"
+        default: "2"
+      boost:
+        description: "Allow waves 3-4 (explicit warm-up cap override)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: pin-runner        # NEVER run alongside the scheduled runner
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 145   # 4 waves x (run + 25 min sleep) + margin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -e .
+
+      - name: Guard — boost required for waves > 2
+        run: |
+          WAVES=${{ inputs.waves || '2' }}
+          BOOST=${{ inputs.boost }}
+          if [ "$WAVES" -gt 2 ] && [ "$BOOST" != "true" ]; then
+            echo "::error::waves>2 requires boost=true (explicit warm-up override)"
+            exit 1
+          fi
+
+      - name: Execute launch waves
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          MONGO_DB: ${{ secrets.MONGO_DB }}
+          TOKEN_MASTER_KEY: ${{ secrets.TOKEN_MASTER_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ALIEXPRESS_APP_KEY: ${{ secrets.ALIEXPRESS_APP_KEY }}
+          ALIEXPRESS_APP_SECRET: ${{ secrets.ALIEXPRESS_APP_SECRET }}
+          ALIEXPRESS_TRACKING_ID: ${{ secrets.ALIEXPRESS_TRACKING_ID }}
+          BRIDGE_PAT: ${{ secrets.BRIDGE_PAT || secrets.GITHUB_BRIDGE_PAT }}
+          PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
+          PINTEREST_APP_SECRET: ${{ secrets.PINTEREST_APP_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL }}
+        run: |
+          WAVES=${{ inputs.waves || '2' }}
+          BOOST=${{ inputs.boost }}
+          OVERRIDE=""
+          if [ "$BOOST" = "true" ]; then OVERRIDE="--daily-cap-override 4"; fi
+          for i in $(seq 1 "$WAVES"); do
+            echo "=== LAUNCH WAVE $i/$WAVES ==="
+            python -m pinner.runner.main --pins-per-account 1 $OVERRIDE
+            if [ "$i" -lt "$WAVES" ]; then
+              echo "sleeping 25 minutes (board spacing)…"
+              sleep 1500
+            fi
+          done

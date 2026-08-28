@@ -255,7 +255,7 @@ class _QATokenStore:
 
 def make_runner(mdb, *, dry_run=False, adapter=None, gemini_script=None,
                 pinterest_router=None, bridge_replies=None, now=T0,
-                pins_per_account=2, run_id_suffix=""):
+                pins_per_account=2, run_id_suffix="", daily_cap_override=None):
     scripted = ScriptedGeminiRunner(*(gemini_script if gemini_script is not None else [
         approve_verdict(), good_strategy()]))
     bridge_transport = FakeTransport(*(bridge_replies or default_bridge_replies(2)))
@@ -272,7 +272,8 @@ def make_runner(mdb, *, dry_run=False, adapter=None, gemini_script=None,
         telegram=lambda text: telegram_messages.append(text),
         image_fetcher=lambda url: b"JPEGDATA",
     )
-    config = RunnerConfig(dry_run=dry_run, pins_per_account=pins_per_account)
+    config = RunnerConfig(dry_run=dry_run, pins_per_account=pins_per_account,
+                          daily_cap_override=daily_cap_override)
     runner = Runner(mdb, deps, config=config, run_id=f"qa-{run_id_suffix}", now=now)
     return runner, {"telegram": telegram_messages,
                     "bridge_transport": bridge_transport}
