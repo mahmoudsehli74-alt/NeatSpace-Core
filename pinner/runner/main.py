@@ -234,7 +234,8 @@ class Runner:
             try:
                 raw = self.deps.adapter.get_product_details(candidate)
                 affiliate_url = self.deps.adapter.build_affiliate_url(
-                    raw.get("source_url") or candidate.product_url
+                    raw.get("source_url") or candidate.product_url,
+                    product_id=claimed["source_product_id"],
                 )
                 self.products.transition(
                     claimed["_id"],

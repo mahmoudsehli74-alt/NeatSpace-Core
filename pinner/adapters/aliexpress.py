@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -132,6 +133,34 @@ def _split_images(raw_images: Any, fallback: Any = None) -> list[str]:
             part = f"https://{part}"
         urls.append(part)
     return urls
+
+
+PRODUCT_URL_RE = re.compile(
+    r"^https://[a-z0-9.-]*aliexpress\.com/item/\d{6,20}\.html?$", re.IGNORECASE
+)
+
+
+def canonical_product_url(url: str, *, product_id: str | None = None) -> str:
+    """Normalize ANY marketplace URL shape into the strict absolute item URL
+    the link.generate gateway accepts (live 405 'result is empty' root cause:
+    tracking-param-laden or non-item URLs were passed verbatim).
+
+    Strategies, in order:
+      1. strip query/fragment, verify it IS an /item/<id>.html URL -> keep;
+      2. if a product_id is known (it always is at fetch time), SYNTHESIZE
+         https://www.aliexpress.com/item/<id>.html — the canonical form;
+      3. otherwise raise Permanent: garbage in -> empty result out (405).
+    """
+    cleaned = str(url or "").split("?")[0].split("#")[0].strip().rstrip("/")
+    if PRODUCT_URL_RE.match(cleaned + (".html" if cleaned.endswith(tuple("0123456789")) else "")):
+        return cleaned if cleaned.endswith(".html") else cleaned + ".html"
+    if cleaned.endswith(".html") and "/item/" in cleaned.lower():
+        return cleaned
+    if product_id and product_id.isdigit():
+        return f"https://www.aliexpress.com/item/{product_id}.html"
+    raise PermanentAdapterError(
+        "aliexpress", f"unusable product URL for link.generate: {url!r}"
+    )
 
 
 def _unwrap_collection(node) -> list:
@@ -364,10 +393,12 @@ class AliExpressAdapter:
             raw["source_url"] = candidate.product_url
         return raw
 
-    def build_affiliate_url(self, product_url: str) -> str:
+    def build_affiliate_url(self, product_url: str, *, product_id: str | None = None) -> str:
+        canonical = canonical_product_url(product_url, product_id=product_id)
         params = {
-            # source_values is the CURRENT parameter (target_url is retired)
-            "source_values": [product_url],
+            # source_values is the CURRENT parameter (target_url is retired);
+            # STRICT canonical absolute item URL (live 405 'result is empty' fix)
+            "source_values": [canonical],
             "tracking_id": self._tracking_id,
             # Live-gateway mandatory (go-launch incident): without it the IOP
             # rejects with MissingParameter. 0 = standard promotion link.

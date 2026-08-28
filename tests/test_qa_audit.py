@@ -216,7 +216,7 @@ class MultiNicheAdapter(StoreAdapter):
                     title=f"{niche.title()} Curated Piece {candidate.source_product_id}",
                     source_url=candidate.product_url)
 
-    def build_affiliate_url(self, product_url: str) -> str:
+    def build_affiliate_url(self, product_url: str, *, product_id: str | None = None) -> str:
         return "https://s.click.aliexpress.com/e/_QA"
 
 

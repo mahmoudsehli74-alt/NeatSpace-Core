@@ -543,3 +543,57 @@ def test_custom_promotion_link_type_passthrough():
     )
     adapter.build_affiliate_url("https://x/item/1.html")
     assert captured[0]["promotion_link_type"] == "2"
+
+
+# --- canonical source_values (live 405 "result is empty" fix) ---------------------
+
+
+def test_link_generate_uses_canonical_item_url():
+    """A tracking-laden detail URL must be stripped to the strict /item/<id>.html
+    form inside source_values."""
+    adapter, posted = make_adapter(
+        lambda form: _ok(
+            "aliexpress.affiliate.link.generate",
+            {"promotion_links": [{"promotion_link": "https://s.click/x"}]},
+        )
+    )
+    adapter.build_affiliate_url(
+        "https://www.aliexpress.com/item/1005006123456789.html?spm=a2g0o.1"
+    )
+    assert posted[0]["form"]["source_values"] == (
+        '["https://www.aliexpress.com/item/1005006123456789.html"]'
+    )
+
+
+def test_link_generate_synthesizes_url_from_product_id():
+    """Garbage URL + known id -> synthesized canonical URL (fetch stage always
+    knows the id)."""
+    adapter, posted = make_adapter(
+        lambda form: _ok(
+            "aliexpress.affiliate.link.generate",
+            {"promotion_links": [{"promotion_link": "https://s.click/x"}]},
+        )
+    )
+    adapter.build_affiliate_url(
+        "https://he.aliexpress.com/w/wholesale.html", product_id="100500222"
+    )
+    assert posted[0]["form"]["source_values"] == (
+        '["https://www.aliexpress.com/item/100500222.html"]'
+    )
+
+
+def test_link_generate_rejects_unusable_url_before_network():
+    adapter, posted = make_adapter(lambda form: "{}")
+    with pytest.raises(PermanentAdapterError):
+        adapter.build_affiliate_url("https://example.com/not-a-product")
+    assert posted == []                                   # zero API calls
+
+
+def test_runner_fetch_passes_product_id_for_synthesis():
+    """The fetch stage wiring: product_id flows into build_affiliate_url."""
+    import inspect
+
+    from pinner.runner import main as runner_main
+
+    source = inspect.getsource(runner_main)
+    assert 'product_id=claimed["source_product_id"]' in source

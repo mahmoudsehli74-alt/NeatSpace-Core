@@ -60,7 +60,7 @@ class FakeAdapter(StoreAdapter):
             raise self.fail_fetch
         return dict(CLEAN_RAW, source_url=candidate.product_url)
 
-    def build_affiliate_url(self, product_url: str) -> str:
+    def build_affiliate_url(self, product_url: str, *, product_id: str | None = None) -> str:
         return "https://s.click.aliexpress.com/e/_TEST"
 
 
