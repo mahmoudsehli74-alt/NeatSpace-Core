@@ -4,6 +4,8 @@
 name: AliExpress Probe
 
 on:
+  push:
+    branches: [main]      # runs automatically during the iteration loop
   workflow_dispatch:
 
 jobs:
@@ -25,4 +27,5 @@ jobs:
           ALIEXPRESS_APP_KEY: ${{ secrets.ALIEXPRESS_APP_KEY }}
           ALIEXPRESS_APP_SECRET: ${{ secrets.ALIEXPRESS_APP_SECRET }}
           ALIEXPRESS_TRACKING_ID: ${{ secrets.ALIEXPRESS_TRACKING_ID }}
+          BRIDGE_PAT: ${{ secrets.BRIDGE_PAT || secrets.GITHUB_BRIDGE_PAT }}
         run: python scripts/probe_aliexpress.py
