@@ -548,9 +548,9 @@ def test_custom_promotion_link_type_passthrough():
 # --- canonical source_values (live 405 "result is empty" fix) ---------------------
 
 
-def test_link_generate_uses_canonical_item_url():
-    """A tracking-laden detail URL must be stripped to the strict /item/<id>.html
-    form inside source_values."""
+def test_link_generate_passes_url_verbatim_first():
+    """Phase-0-proven: the FULL product_detail_url (query params intact) is
+    what link.generate accepts — verbatim first, no stripping."""
     adapter, posted = make_adapter(
         lambda form: _ok(
             "aliexpress.affiliate.link.generate",
@@ -561,25 +561,62 @@ def test_link_generate_uses_canonical_item_url():
         "https://www.aliexpress.com/item/1005006123456789.html?spm=a2g0o.1"
     )
     assert posted[0]["form"]["source_values"] == (
-        '["https://www.aliexpress.com/item/1005006123456789.html"]'
+        '["https://www.aliexpress.com/item/1005006123456789.html?spm=a2g0o.1"]'
     )
 
 
-def test_link_generate_synthesizes_url_from_product_id():
-    """Garbage URL + known id -> synthesized canonical URL (fetch stage always
-    knows the id)."""
+def test_link_generate_synthesizes_when_url_missing():
     adapter, posted = make_adapter(
         lambda form: _ok(
             "aliexpress.affiliate.link.generate",
             {"promotion_links": [{"promotion_link": "https://s.click/x"}]},
         )
     )
-    adapter.build_affiliate_url(
-        "https://he.aliexpress.com/w/wholesale.html", product_id="100500222"
-    )
+    adapter.build_affiliate_url("", product_id="100500222")
     assert posted[0]["form"]["source_values"] == (
         '["https://www.aliexpress.com/item/100500222.html"]'
     )
+
+
+def test_405_empty_result_retries_with_canonical_form():
+    """LIVE incident chain: verbatim URL -> 405 'The result is empty' ->
+    automatic retry with the canonical stripped URL."""
+    attempts: list[str] = []
+
+    def transport(url, form):
+        import json as _json
+
+        attempts.append(form["source_values"])
+        if len(attempts) == 1:
+            body = {"aliexpress_affiliate_link_generate_response": {
+                "resp_result": {"resp_code": 405, "resp_msg": "The result is empty"}}}
+            return 200, _json.dumps(body)
+        return 200, _ok(
+            "aliexpress.affiliate.link.generate",
+            {"promotion_links": [{"promotion_link": "https://s.click/x"}]},
+        )
+
+    adapter = ax.AliExpressAdapter(APP_KEY, APP_SECRET, TRACKING_ID, transport=transport)
+    url = adapter.build_affiliate_url(
+        "https://www.aliexpress.com/item/1005006123456789.html?spm=zzz"
+    )
+    assert url == "https://s.click/x"
+    assert len(attempts) == 2
+    # first verbatim, second canonical
+    assert "spm=zzz" in attempts[0]
+    assert attempts[1] == '["https://www.aliexpress.com/item/1005006123456789.html"]'
+
+
+def test_resp_code_alias_classifies_errors():
+    adapter, _ = make_adapter(
+        lambda form: json.dumps({
+            "aliexpress_affiliate_link_generate_response": {
+                "resp_result": {"resp_code": 405, "resp_msg": "The result is empty"}}})
+    )
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.build_affiliate_url("https://x/item/1.html", product_id="1")
+    assert "biz error 405" in str(err.value)
+    assert "The result is empty" in str(err.value)
 
 
 def test_link_generate_rejects_unusable_url_before_network():

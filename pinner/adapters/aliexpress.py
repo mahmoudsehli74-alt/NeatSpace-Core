@@ -217,7 +217,10 @@ def normalize_product(item: dict) -> RawProduct:
             rating = float(rating)
         except ValueError:
             rating = None
-    detail_url = (item.get("product_detail_url") or "").split("?")[0]
+    # FULL URL verbatim: link.generate is Phase-0-proven against the exact
+    # product_detail_url the API returns (query params included). Stripping
+    # them triggered 405 "The result is empty" on live link generation.
+    detail_url = item.get("product_detail_url") or ""
     shop_name = item.get("shop_name") or (
         f"shop-{item['shop_id']}" if item.get("shop_id") else "unknown-shop"
     )
@@ -326,13 +329,16 @@ class AliExpressAdapter:
                 # or app authorization). Raw body must surface, not None: None.
                 raise reject("empty resp_result envelope")
             code = resp_result.get("code")
+            if code is None:
+                code = resp_result.get("resp_code")   # live generation alias
+            msg = resp_result.get("msg") or resp_result.get("resp_msg")
             has_result = bool(resp_result.get("result"))
             # Error ONLY on an EXPLICIT non-zero code, or when result is
             # entirely missing. Verified live: the current API generation
             # omits resp_result.code on success — code=None + result present
             # is a VALID response, not "biz error None: None".
             if code is not None and code not in (200, 0):
-                biz = f"biz error {code}: {resp_result.get('msg')}"
+                biz = f"biz error {code}: {msg}"
                 logger.warning(
                     "[aliexpress] %s for %s | raw body: %s", biz, method, _raw_snippet(text)
                 )
@@ -420,11 +426,25 @@ class AliExpressAdapter:
         return raw
 
     def build_affiliate_url(self, product_url: str, *, product_id: str | None = None) -> str:
-        canonical = canonical_product_url(product_url, product_id=product_id)
+        last_error: Exception | None = None
+        # Verbatim first (Phase-0-proven: full product_detail_url incl. query
+        # params); canonical stripped form as the single retry.
+        for attempt_url in dict.fromkeys([
+            product_url or "",
+            canonical_product_url(product_url, product_id=product_id),
+        ]):
+            if not attempt_url:
+                continue
+            try:
+                return self._generate_link(attempt_url)
+            except PermanentAdapterError as exc:
+                last_error = exc
+        raise last_error or PermanentAdapterError("aliexpress", "link.generate failed")
+
+    def _generate_link(self, attempt_url: str) -> str:
         params = {
-            # source_values is the CURRENT parameter (target_url is retired);
-            # STRICT canonical absolute item URL (live 405 'result is empty' fix)
-            "source_values": [canonical],
+            # source_values is the CURRENT parameter (target_url is retired)
+            "source_values": [attempt_url],
             "tracking_id": self._tracking_id,
             # Live-gateway mandatory (go-launch incident): without it the IOP
             # rejects with MissingParameter. 0 = standard promotion link.
@@ -443,6 +463,6 @@ class AliExpressAdapter:
         url = (links[0] or {}).get("promotion_link") if links else None
         if not url:
             raise PermanentAdapterError(
-                "aliexpress", f"no promotion link returned for {product_url}"
+                "aliexpress", f"no promotion link returned for {attempt_url}"
             )
         return url
