@@ -6,6 +6,9 @@ for HUMANS operating the system — the autonomous runner never calls these.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
+
 from pinner.repo.pins import PinsRepo
 from pinner.repo.products import ProductsRepo
 
@@ -53,6 +56,52 @@ def requeue(db, collection: str, doc_id, *, run_id: str = "ops") -> dict:
     if collection == "products":
         return ProductsRepo(db).requeue_dead(doc_id, run_id=run_id)
     raise ValueError(f"unknown collection: {collection!r} (use 'pins' or 'products')")
+
+
+
+
+def reset_dead_products(
+    db,
+    *,
+    error_substrings: tuple[str, ...] = ("MissingParameter",),
+    limit: int = 500,
+    run_id: str = "catalog-reset",
+    now: datetime | None = None,
+) -> dict:
+    """OPS bulk revival for DEAD_FETCH products whose failure signature
+    matches a SINCE-FIXED request-construction bug (e.g. the launch's
+    MissingParameter incident). Returns the catalog to PENDING_FETCH with a
+    fresh attempt budget, writing an audited CATALOG_RESET event per doc.
+
+    Deliberately NOT automatic: the runner never revives DEAD states on its
+    own — genuinely bad products (unavailable, policy-removed) must not
+    resurrect. Scope is controlled by error_substrings; pass ("",) with
+    --all to sweep everything knowingly."""
+    from pinner.repo.engine import fresh_attempt, utcnow
+
+    now = now if now is not None else utcnow()
+    query: dict = {"status": "DEAD_FETCH"}
+    if error_substrings:
+        # one case-insensitive alternation regex ($regex cannot nest under $in)
+        pattern = "|".join(re.escape(s) for s in error_substrings if s)
+        if pattern:
+            query["attempt.last_error"] = {"$regex": pattern, "$options": "i"}
+    reset = 0
+    for product in db.products.find(query).limit(limit):
+        result = db.products.update_one(
+            {"_id": product["_id"], "status": "DEAD_FETCH"},
+            {"$set": {"status": "PENDING_FETCH", "attempt": fresh_attempt(),
+                      "last_updated_at": now}},
+        )
+        if result.matched_count:
+            reset += 1
+            db.audit_log.insert_one({
+                "ts": now, "run_id": run_id, "entity": "products",
+                "entity_id": product["_id"], "event": "CATALOG_RESET",
+                "from_state": "DEAD_FETCH", "to_state": "PENDING_FETCH",
+                "detail": {"prior_error": (product.get("attempt") or {}).get("last_error")},
+            })
+    return {"reset": reset, "matched_query": query}
 
 
 def status_summary(db) -> dict:

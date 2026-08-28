@@ -47,6 +47,15 @@ def main() -> int:
     p_requeue.add_argument("--collection", choices=["pins", "products"], required=True)
     p_requeue.add_argument("--id", required=True)
 
+    p_reset = sub.add_parser("reset-products",
+                             help="bulk-revive DEAD_FETCH products (incident-scoped)")
+    p_reset.add_argument("--error", action="append", default=[],
+                         help="only products whose last_error contains this substring "
+                              "(repeatable). Default: MissingParameter")
+    p_reset.add_argument("--all", action="store_true",
+                         help="sweep ALL DEAD_FETCH products (explicit)")
+    p_reset.add_argument("--limit", type=int, default=500)
+
     args = parser.parse_args()
     settings = load_settings()
     client = get_client(settings.mongo_uri)
@@ -60,6 +69,13 @@ def main() -> int:
         elif args.command == "resume":
             n = ops.resume_account(db, args.account)
             print(f"resumed {n} pin(s) for {args.account!r}; account status -> ACTIVE")
+        elif args.command == "reset-products":
+            substrings = tuple(args.error) if args.error else (("MissingParameter",))
+            if args.all:
+                substrings = ()
+            report = ops.reset_dead_products(db, error_substrings=substrings,
+                                             limit=args.limit)
+            print(f"reset {report['reset']} DEAD_FETCH product(s) -> PENDING_FETCH")
         elif args.command == "requeue":
             doc = ops.requeue(db, args.collection, _default(args.id))
             print(f"requeued {args.collection} {args.id} -> {doc['status']}")
