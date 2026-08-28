@@ -51,10 +51,18 @@ jobs:
 
       - name: LIVE smoke (1 item, real APIs)
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.account }}" ]; then ARGS="$ARGS --account ${{ inputs.account }}"; fi
-          if [ -n "${{ inputs.keywords }}" ]; then ARGS="$ARGS --keywords ${{ inputs.keywords }}"; fi
-          if [ -n "${{ inputs.board_id }}" ]; then ARGS="$ARGS --board-id ${{ inputs.board_id }}"; fi
-          if [ "${{ inputs.skip_pin }}" = "true" ]; then ARGS="$ARGS --skip-pin"; fi
-          echo "invoking: python scripts/live_smoke_test.py $ARGS"
-          python scripts/live_smoke_test.py $ARGS
+          ARGS=()
+          if [ -n "${{ inputs.account }}" ]; then
+            ARGS+=(--account "${{ inputs.account }}")
+          fi
+          if [ -n "${{ inputs.keywords }}" ]; then
+            ARGS+=(--keywords "${{ inputs.keywords }}")
+          fi
+          if [ -n "${{ inputs.board_id }}" ]; then
+            ARGS+=(--board-id "${{ inputs.board_id }}")
+          fi
+          if [ "${{ inputs.skip_pin }}" = "true" ]; then
+            ARGS+=(--skip-pin)
+          fi
+          echo "invoking: python scripts/live_smoke_test.py ${ARGS[*]}"
+          python scripts/live_smoke_test.py "${ARGS[@]}"
