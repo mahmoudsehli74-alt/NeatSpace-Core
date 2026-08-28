@@ -19,6 +19,8 @@ Usage (Actions: live_smoke.yml | local: .env present):
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -38,14 +40,20 @@ def banner(title: str) -> None:
     print(f"\n{'=' * 62}\n {title}\n{'=' * 62}")
 
 
+REPORT_PATH = Path(".smoke/latest.json")
+
+
 class StageReport:
-    """Persists per-stage evidence to Atlas (smoke_reports) so autonomous
-    iteration can read live results without Actions log access."""
+    """Dual-channel evidence: (1) Atlas smoke_reports for querying, (2) a
+    local file flushed at BOOT (pre-network) and every stage, which the
+    workflow commits back to the repo — readable even when the run dies
+    before any Mongo connection."""
 
     def __init__(self, db, run_tag: str) -> None:
         self.db = db
         self.doc = {"run_tag": run_tag, "stages": {}, "pin_url": None,
                     "destination": None, "ok": False, "started": time.time()}
+        self._file_flush()
 
     def record(self, stage: str, **fields) -> None:
         self.doc["stages"][stage] = {"ok": True, **fields}
@@ -64,9 +72,18 @@ class StageReport:
         self.doc["finished"] = time.time()
         self._flush()
 
-    def _flush(self) -> None:
+    def _file_flush(self) -> None:
         try:
             self.doc["updated"] = time.time()
+            REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+            REPORT_PATH.write_text(json.dumps(self.doc, indent=2, default=str),
+                                   encoding="utf-8")
+        except Exception:
+            pass
+
+    def _flush(self) -> None:
+        self._file_flush()
+        try:
             self.db.smoke_reports.update_one(
                 {"run_tag": self.doc["run_tag"]}, {"$set": self.doc}, upsert=True
             )
@@ -85,10 +102,18 @@ def main() -> int:
     parser.add_argument("--db")
     args = parser.parse_args()
 
-    settings = load_settings()
-    db = get_client(settings.mongo_uri)[args.db or settings.mongo_db]
     import uuid
 
+    sha = os.environ.get("GITHUB_SHA", "")[:8]
+    boot = StageReport.__new__(StageReport)
+    boot.db = None
+    boot.doc = {"run_tag": f"smoke-boot-{sha}", "stages": {"boot": {"ok": True}},
+                "ok": None, "started": time.time()}
+    boot._file_flush()
+    print(f"{STEP} boot report flushed: {REPORT_PATH}")
+
+    settings = load_settings()
+    db = get_client(settings.mongo_uri)[args.db or settings.mongo_db]
     report = StageReport(db, f"smoke-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}")
     print(f"{STEP} report tag: {report.doc['run_tag']}")
 
