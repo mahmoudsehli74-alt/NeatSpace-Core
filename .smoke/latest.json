@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260828-214044-dcd81c",
+  "run_tag": "smoke-20260828-215637-95eaa4",
   "stages": {
     "account": {
       "ok": true,
@@ -9,19 +9,24 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812730338668",
-      "title": "One Adhesive Command Wall Organizer | Hands-Free Charging Station & Remote Control Holder for Living Room, Bedroom, Kitc"
+      "product_id": "3256809692036148",
+      "title": "Capybara Bento Lunch Box Anime Animals Print Food Storage Containers Kids School Picnic Lunchbox Boys Girls Office Dinne"
     },
     "affiliate": {
       "ok": false,
       "error": "PermanentAdapterError: [aliexpress] biz error 405: The result is empty",
-      "product_id": "3256812730338668",
-      "source_url": "https://www.aliexpress.com/item/3256812730338668.html?pdp_npi=6%40dis%21USD%214.05%211.64%21%21%2127.07%2110.98%21%40215"
+      "product_id": "3256809692036148",
+      "source_url": "https://www.aliexpress.com/item/3256809692036148.html?pdp_npi=6%40dis%21USD%212.00%212.00%21%21%2113.39%2113.39%21%40214",
+      "url_matrix": {
+        "verbatim-full": "FAIL [aliexpress] biz error 405: The result is empty",
+        "stripped": "FAIL [aliexpress] biz error 405: The result is empty",
+        "bare-canonical": "FAIL [aliexpress] biz error 405: The result is empty"
+      }
     }
   },
   "pin_url": null,
   "destination": null,
   "ok": false,
-  "started": 1787953244.954071,
-  "updated": 1787953251.3650248
+  "started": 1787954197.6959949,
+  "updated": 1787954208.2348664
 }
