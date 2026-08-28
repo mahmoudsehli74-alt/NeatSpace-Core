@@ -211,9 +211,21 @@ def main() -> int:
         import traceback
 
         traceback.print_exc()
+        # URL-shape matrix forensics: which source_values form does the
+        # gateway actually accept for THIS product right now?
+        matrix: dict[str, str] = {}
+        stripped = (raw.get("source_url") or "").split("?")[0]
+        bare = f"https://www.aliexpress.com/item/{cand.source_product_id}.html"
+        for label, url in (("verbatim-full", raw.get("source_url") or ""),
+                           ("stripped", stripped), ("bare-canonical", bare)):
+            try:
+                matrix[label] = adapter.build_affiliate_url(url)[:160]
+            except Exception as m_exc:
+                matrix[label] = f"FAIL {str(m_exc)[:160]}"
         report.fail("affiliate", f"{type(exc).__name__}: {exc}",
                     product_id=cand.source_product_id,
-                    source_url=raw.get("source_url", "")[:120])
+                    source_url=raw.get("source_url", "")[:120],
+                    url_matrix=matrix)
         return 1
     print(f"{STEP} {affiliate_url}  ({time.time() - t0:.1f}s)")
     if not affiliate_url.startswith("https://"):
