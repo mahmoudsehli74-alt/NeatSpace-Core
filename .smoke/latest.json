@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260828-203240-edd078",
+  "run_tag": "smoke-20260828-214044-dcd81c",
   "stages": {
     "account": {
       "ok": true,
@@ -9,19 +9,19 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256809692036148",
-      "title": "Capybara Bento Lunch Box Anime Animals Print Food Storage Containers Kids School Picnic Lunchbox Boys Girls Office Dinne"
+      "product_id": "3256812730338668",
+      "title": "One Adhesive Command Wall Organizer | Hands-Free Charging Station & Remote Control Holder for Living Room, Bedroom, Kitc"
     },
     "affiliate": {
       "ok": false,
-      "error": "PermanentAdapterError: [aliexpress] resp_result has neither code nor result [http 200] (body={\"aliexpress_affiliate_link_generate_response\":{\"resp_result\":{\"resp_code\":405,\"resp_msg\":\"The result is empty\"},\"request_id\":\"2154147317879491665471217\",\"_trace_id_\":\"2140f89017879491665457371e0e0b\"}}; no recognizable fields)",
-      "product_id": "3256809692036148",
-      "source_url": "https://www.aliexpress.com/item/3256809692036148.html"
+      "error": "PermanentAdapterError: [aliexpress] biz error 405: The result is empty",
+      "product_id": "3256812730338668",
+      "source_url": "https://www.aliexpress.com/item/3256812730338668.html?pdp_npi=6%40dis%21USD%214.05%211.64%21%21%2127.07%2110.98%21%40215"
     }
   },
   "pin_url": null,
   "destination": null,
   "ok": false,
-  "started": 1787949160.882747,
-  "updated": 1787949166.6870356
+  "started": 1787953244.954071,
+  "updated": 1787953251.3650248
 }
