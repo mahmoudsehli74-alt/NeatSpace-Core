@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260828-195841-47ab72",
+  "run_tag": "smoke-20260828-203240-edd078",
   "stages": {
     "account": {
       "ok": true,
@@ -11,11 +11,17 @@
       "ok": true,
       "product_id": "3256809692036148",
       "title": "Capybara Bento Lunch Box Anime Animals Print Food Storage Containers Kids School Picnic Lunchbox Boys Girls Office Dinne"
+    },
+    "affiliate": {
+      "ok": false,
+      "error": "PermanentAdapterError: [aliexpress] resp_result has neither code nor result [http 200] (body={\"aliexpress_affiliate_link_generate_response\":{\"resp_result\":{\"resp_code\":405,\"resp_msg\":\"The result is empty\"},\"request_id\":\"2154147317879491665471217\",\"_trace_id_\":\"2140f89017879491665457371e0e0b\"}}; no recognizable fields)",
+      "product_id": "3256809692036148",
+      "source_url": "https://www.aliexpress.com/item/3256809692036148.html"
     }
   },
   "pin_url": null,
   "destination": null,
   "ok": false,
-  "started": 1787947121.0757394,
-  "updated": 1787947126.043465
+  "started": 1787949160.882747,
+  "updated": 1787949166.6870356
 }
