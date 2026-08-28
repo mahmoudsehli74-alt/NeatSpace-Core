@@ -203,9 +203,18 @@ def main() -> int:
     # ── 2. affiliate link ───────────────────────────────────────────────
     banner("2. AFFILIATE LINK (live IOP link.generate)")
     t0 = time.time()
-    affiliate_url = adapter.build_affiliate_url(
-        raw["source_url"] or cand.product_url, product_id=cand.source_product_id
-    )
+    try:
+        affiliate_url = adapter.build_affiliate_url(
+            raw["source_url"] or cand.product_url, product_id=cand.source_product_id
+        )
+    except Exception as exc:
+        import traceback
+
+        traceback.print_exc()
+        report.fail("affiliate", f"{type(exc).__name__}: {exc}",
+                    product_id=cand.source_product_id,
+                    source_url=raw.get("source_url", "")[:120])
+        return 1
     print(f"{STEP} {affiliate_url}  ({time.time() - t0:.1f}s)")
     if not affiliate_url.startswith("https://"):
         print("!! affiliate link is not https — invalid for Pinterest")
