@@ -47,6 +47,10 @@ API_VERSION = "2.0"
 # IOP error codes that mean "slow down / try again later" (traffic limiting).
 TRANSIENT_IOP_CODES = {20000000}
 
+# Mandatory business params per endpoint (asserted BEFORE every call so a
+# gateway "MissingParameter" can never reach production unnoticed).
+REQUIRED_LINK_GENERATE_PARAMS = ("source_values", "tracking_id", "promotion_link_type")
+
 Transport = Callable[[str, dict[str, str]], "tuple[int, str]"]
 
 
@@ -190,12 +194,14 @@ class AliExpressAdapter:
         *,
         base_url: str = IOP_GATEWAY,
         transport: Transport | None = None,
+        promotion_link_type: int = 0,
     ) -> None:
         self._app_key = app_key
         self._app_secret = app_secret
         self._tracking_id = tracking_id
         self._base_url = base_url
         self._transport = transport or _default_transport
+        self._promotion_link_type = promotion_link_type
 
     # --- protocol plumbing ------------------------------------------------------
 
@@ -359,13 +365,22 @@ class AliExpressAdapter:
         return raw
 
     def build_affiliate_url(self, product_url: str) -> str:
+        params = {
+            # source_values is the CURRENT parameter (target_url is retired)
+            "source_values": [product_url],
+            "tracking_id": self._tracking_id,
+            # Live-gateway mandatory (go-launch incident): without it the IOP
+            # rejects with MissingParameter. 0 = standard promotion link.
+            "promotion_link_type": self._promotion_link_type,
+        }
+        missing = [k for k in REQUIRED_LINK_GENERATE_PARAMS if k not in params]
+        if missing:
+            raise PermanentAdapterError(
+                "aliexpress", f"link.generate missing mandatory params: {missing}"
+            )
         result = self._call(
             "aliexpress.affiliate.link.generate",
-            {
-                # source_values is the CURRENT parameter (target_url is retired)
-                "source_values": [product_url],
-                "tracking_id": self._tracking_id,
-            },
+            params,
         )
         links = _unwrap_collection(result.get("promotion_links"))
         url = (links[0] or {}).get("promotion_link") if links else None

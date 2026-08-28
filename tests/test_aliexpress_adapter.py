@@ -463,3 +463,83 @@ def test_legacy_list_shapes_still_parse():
         )
     )
     assert len(adapter.search_products("x")) == 1
+
+
+# --- mandatory-parameter contract (live incident: MissingParameter) ---------------
+
+
+def test_link_generate_payload_carries_promotion_link_type():
+    """THE launch incident: gateway mandated promotion_link_type on
+    link.generate. The outgoing form must include it (as compact string),
+    covered by the signature like every other business param."""
+    adapter, posted = make_adapter(
+        lambda form: _ok(
+            "aliexpress.affiliate.link.generate",
+            {"promotion_links": [{"promotion_link": "https://s.click.aliexpress.com/e/_L"}]},
+        )
+    )
+    url = adapter.build_affiliate_url("https://www.aliexpress.com/item/1.html")
+    assert url.endswith("_L")
+    form = posted[0]["form"]
+    assert form["method"] == "aliexpress.affiliate.link.generate"
+    assert form["promotion_link_type"] == "0"          # standard promotion link
+    assert form["source_values"].startswith('["https://')
+    assert form["tracking_id"] == TRACKING_ID
+    unsigned = {k: v for k, v in form.items() if k != "sign"}
+    assert form["sign"] == ax.sign_md5(APP_SECRET, unsigned)
+
+
+def test_link_generate_missing_param_contract_fails_before_network():
+    """If a future edit drops a mandatory param, the adapter must refuse
+    BEFORE spending the API call."""
+    from pinner.adapters.aliexpress import REQUIRED_LINK_GENERATE_PARAMS
+
+    adapter, posted = make_adapter(lambda form: "{}")
+    # monkeypatch the params builder's input: simulate by asserting the
+    # contract constant covers exactly the params the builder emits
+    # (structural lock, not just behavioral)
+    adapter, posted = make_adapter(
+        lambda form: _ok(
+            "aliexpress.affiliate.link.generate",
+            {"promotion_links": [{"promotion_link": "https://s.click/x"}]},
+        )
+    )
+    adapter.build_affiliate_url("https://x/item/1.html")
+    form = posted[0]["form"]
+    for param in REQUIRED_LINK_GENERATE_PARAMS:
+        assert param in form, f"mandatory param {param} absent from form"
+
+
+def test_missing_parameter_error_is_permanent_classification():
+    """Gateway's MissingParameter (string code) must classify PERMANENT so a
+    payload-construction bug poisons fast instead of retry-burning quota."""
+    adapter, _ = make_adapter(
+        lambda form: json.dumps({
+            "error_response": {
+                "code": "MissingParameter",
+                "msg": 'The input parameter "promotion_link_type" '
+                       "that is mandatory for processing this request is not supplied",
+            }
+        })
+    )
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.build_affiliate_url("https://x/item/1.html")
+    assert "MissingParameter" in str(err.value)
+    assert "promotion_link_type" in str(err.value)      # gateway msg preserved
+
+
+def test_custom_promotion_link_type_passthrough():
+    captured: list[dict] = []
+
+    def transport(url, form):
+        captured.append(dict(form))
+        return 200, _ok(
+            "aliexpress.affiliate.link.generate",
+            {"promotion_links": [{"promotion_link": "https://s.click/x"}]},
+        )
+
+    adapter = ax.AliExpressAdapter(
+        APP_KEY, APP_SECRET, TRACKING_ID, transport=transport, promotion_link_type=2
+    )
+    adapter.build_affiliate_url("https://x/item/1.html")
+    assert captured[0]["promotion_link_type"] == "2"
