@@ -27,11 +27,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# BOOT EVIDENCE: flush before ANY pinner import so even import-time crashes
+# leave a readable trace in the committed report.
+_BOOT = {"stage": "imports", "started": time.time()}
+try:
+    Path(".smoke").mkdir(parents=True, exist_ok=True)
+    Path(".smoke/latest.json").write_text(json.dumps(_BOOT, default=str), encoding="utf-8")
+except Exception:
+    pass
+
 from pinner.adapters.base import get_adapter  # noqa: E402
 from pinner.config import load_settings  # noqa: E402
 from pinner.imaging import to_vertical  # noqa: E402
 from pinner.repo.mongo import get_client  # noqa: E402
 from pinner.tools.pinterest import PinterestTool, download_image  # noqa: E402
+
+_BOOT.update({"stage": "imports-complete", "ok": True})
+try:
+    Path(".smoke/latest.json").write_text(json.dumps(_BOOT, default=str), encoding="utf-8")
+except Exception:
+    pass
 
 STEP = "  ▸"
 
