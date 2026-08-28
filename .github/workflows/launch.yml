@@ -12,6 +12,12 @@
 # EXPLICIT, loudly-logged warm-up bypass. The override stamps every
 # Telegram digest and runs doc ("OVERRIDE: daily cap forced to N").
 # Recommended: run waves=2 today, waves=2 tomorrow — zero override needed.
+#
+# ── AUTO RESET (pre-execution) ──────────────────────────────────────────
+# auto_reset_dead (default true): revives ALL DEAD_FETCH products in Atlas
+# to PENDING_FETCH with fresh attempt budgets (audited per document) BEFORE
+# wave 1 — no local CLI or .env needed. Surgical alternative if ever
+# required: scripts/ops.py reset-products --error MissingParameter.
 # ═══════════════════════════════════════════════════════════════════════
 name: Production Launch
 
@@ -25,6 +31,25 @@ on:
         description: "Allow waves 3-4 (explicit warm-up cap override)"
         type: boolean
         default: false
+      auto_reset_dead:
+        description: "Revive all DEAD_FETCH products before wave 1"
+        type: boolean
+        default: true
+
+env:
+  MONGO_URI: ${{ secrets.MONGO_URI }}
+  MONGO_DB: ${{ secrets.MONGO_DB }}
+  TOKEN_MASTER_KEY: ${{ secrets.TOKEN_MASTER_KEY }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  ALIEXPRESS_APP_KEY: ${{ secrets.ALIEXPRESS_APP_KEY }}
+  ALIEXPRESS_APP_SECRET: ${{ secrets.ALIEXPRESS_APP_SECRET }}
+  ALIEXPRESS_TRACKING_ID: ${{ secrets.ALIEXPRESS_TRACKING_ID }}
+  BRIDGE_PAT: ${{ secrets.BRIDGE_PAT || secrets.GITHUB_BRIDGE_PAT }}
+  PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
+  PINTEREST_APP_SECRET: ${{ secrets.PINTEREST_APP_SECRET }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  AGENT_MODEL: ${{ vars.AGENT_MODEL }}
 
 concurrency:
   group: pin-runner        # NEVER run alongside the scheduled runner
@@ -54,21 +79,13 @@ jobs:
             exit 1
           fi
 
+      - name: Auto-reset dead catalog (audited)
+        if: ${{ inputs.auto_reset_dead == true || inputs.auto_reset_dead == 'true' }}
+        run: |
+          echo "=== PRE-EXECUTION: catalog reset (--all) ==="
+          python scripts/ops.py reset-products --all
+
       - name: Execute launch waves
-        env:
-          MONGO_URI: ${{ secrets.MONGO_URI }}
-          MONGO_DB: ${{ secrets.MONGO_DB }}
-          TOKEN_MASTER_KEY: ${{ secrets.TOKEN_MASTER_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          ALIEXPRESS_APP_KEY: ${{ secrets.ALIEXPRESS_APP_KEY }}
-          ALIEXPRESS_APP_SECRET: ${{ secrets.ALIEXPRESS_APP_SECRET }}
-          ALIEXPRESS_TRACKING_ID: ${{ secrets.ALIEXPRESS_TRACKING_ID }}
-          BRIDGE_PAT: ${{ secrets.BRIDGE_PAT || secrets.GITHUB_BRIDGE_PAT }}
-          PINTEREST_APP_ID: ${{ secrets.PINTEREST_APP_ID }}
-          PINTEREST_APP_SECRET: ${{ secrets.PINTEREST_APP_SECRET }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          AGENT_MODEL: ${{ vars.AGENT_MODEL }}
         run: |
           WAVES=${{ inputs.waves || '2' }}
           BOOST=${{ inputs.boost }}
