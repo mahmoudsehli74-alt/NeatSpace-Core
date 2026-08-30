@@ -298,12 +298,23 @@ def main() -> int:
         "affiliate_url": affiliate_url,
         "disclosure": "As an affiliate, we may earn from qualifying purchases.",
     }
-    commit = bridge.push_product(repo, product_key, payload)
-    print(f"{STEP} committed={commit['committed']} sha={commit['commit_sha']} "
-          f"path={commit['path']}")
-    json_url = f"https://{domain}/products/{product_key}.json"
-    deployed = bridge.verify_deployed(json_url, attempts=6, wait_seconds=10)
-    print(f"{STEP} deployed({json_url}): {deployed}")
+    try:
+        commit = bridge.push_product(repo, product_key, payload)
+        print(f"{STEP} committed={commit['committed']} sha={commit['commit_sha']} "
+              f"path={commit['path']}")
+        json_url = f"https://{domain}/products/{product_key}.json"
+        # Pages builds take 1-3 min after the Contents commit; poll 12x15s
+        deployed = bridge.verify_deployed(json_url, attempts=12, wait_seconds=15)
+        print(f"{STEP} deployed({json_url}): {deployed}")
+    except Exception as exc:
+        # A 403 here almost always means the fine-grained BRIDGE_PAT lacks
+        # "Contents: Read and write" — surface it as a diagnosable stage
+        # failure instead of an unhandled crash.
+        print(f"!! bridge commit failed: {type(exc).__name__}: {exc}")
+        report.fail("bridge", f"{type(exc).__name__}: {exc}",
+                    hint="BRIDGE_PAT needs Contents:Read+write on the storefront repo "
+                         "(fine-grained PAT permission)")
+        return 1
     bridge_url = f"https://{domain}/?id={product_key}"
     print(f"{STEP} DESTINATION: {bridge_url}")
     report.record("bridge", commit_sha=commit["commit_sha"], json_url=json_url,
