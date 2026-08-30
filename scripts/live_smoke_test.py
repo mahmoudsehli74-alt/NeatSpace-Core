@@ -168,90 +168,79 @@ def main() -> int:
         return 1
     print(f"{STEP} {len(candidates)} candidates in {time.time() - t0:.1f}s")
 
-    # DEFENSIVE EXTRACTION: try each candidate until one yields a usable
-    # (title + images) payload. Vendor drift on one listing must never kill
-    # the smoke run — it warns, dumps raw keys for forensics, and moves on.
-    cand, raw = None, None
+    # DEFENSIVE CANDIDATE PIPE: each candidate must pass THREE gates — payload
+    # extraction, live affiliate link generation, and live Gemini moderation.
+    # A single brand-named listing (e.g. "Command" — a 3M trademark that the
+    # Moderator correctly REJECTs) or one malformed payload must never kill
+    # the run; the pipe advances to the next candidate. Green == a pin was
+    # minted, nothing less.
+    moderator = None
+    if settings.gemini_api_key:
+        from pinner.agents import build_agents
+
+        moderator, _ = build_agents(settings.gemini_api_key)
+
+    banner("2-3. CANDIDATE PIPE: details -> affiliate link -> moderation (live)")
+    cand = raw = affiliate_url = None
+    rejects: dict[str, str] = {}
     for index, candidate in enumerate(candidates):
+        pid = candidate.source_product_id
         try:
             probe = adapter.get_product_details(candidate)
         except Exception as exc:
-            print(f"{STEP} candidate {index} ({candidate.source_product_id}) "
-                  f"fetch failed: {type(exc).__name__}: {str(exc)[:120]} — skipping")
+            print(f"{STEP} candidate {index} ({pid}) fetch failed: "
+                  f"{type(exc).__name__}: {str(exc)[:120]} — skipping")
+            rejects[pid] = f"fetch: {type(exc).__name__}: {str(exc)[:100]}"
             continue
         title = (probe.get("title") or "").strip()
         images = [u for u in (probe.get("images") or [])
                   if isinstance(u, str) and u.startswith("http")]
         if not title or not images:
-            print(f"{STEP} candidate {index} ({candidate.source_product_id}) "
-                  f"malformed (title={'ok' if title else 'MISSING'}, "
-                  f"images={len(images)}) — raw keys: {sorted(probe.keys())} — skipping")
+            print(f"{STEP} candidate {index} ({pid}) malformed "
+                  f"(title={'ok' if title else 'MISSING'}, images={len(images)}) "
+                  f"— raw keys: {sorted(probe.keys())} — skipping")
+            rejects[pid] = f"malformed payload (title={bool(title)}, images={len(images)})"
             continue
-        cand, raw = candidate, probe
-        print(f"{STEP} candidate {index} accepted: {cand.source_product_id} — "
-              f"{cand.title[:60]}")
+        try:
+            link = adapter.build_affiliate_url(
+                probe.get("source_url") or candidate.product_url,
+                product_id=pid,
+            )
+        except Exception as exc:
+            print(f"{STEP} candidate {index} ({pid}) affiliate failed: "
+                  f"{type(exc).__name__}: {str(exc)[:140]} — skipping")
+            rejects[pid] = f"affiliate: {type(exc).__name__}: {str(exc)[:100]}"
+            continue
+        if not link.startswith("https://"):
+            print(f"{STEP} candidate {index} ({pid}) non-https link — skipping")
+            rejects[pid] = f"non-https link: {link[:80]}"
+            continue
+        if moderator is not None:
+            verdict = moderator.review(probe)
+            print(f"{STEP} candidate {index} ({pid}) moderation: "
+                  f"{verdict.verdict} conf={verdict.confidence:.2f} "
+                  f"reasons={verdict.reasons}")
+            if verdict.verdict != "APPROVE":
+                rejects[pid] = f"{verdict.verdict}: {str(verdict.reasons)[:100]}"
+                continue
+        cand, raw, affiliate_url = candidate, probe, link
+        print(f"{STEP} candidate {index} ACCEPTED: {pid} — {candidate.title[:60]}")
         break
+
     if cand is None:
-        print("!! no usable candidate in this batch — payload keys were dumped "
-              "above for schema forensics; retry with different --keywords")
-        report.fail("extract", "no usable candidate in batch")
+        print("!! every candidate in the batch was rejected before pinning")
+        report.fail("moderation",
+                    f"all {len(candidates)} candidates rejected before pinning",
+                    rejects=rejects)
         return 1
-    report.record("discover", product_id=cand.source_product_id, title=cand.title[:120])
+    report.record("discover", product_id=cand.source_product_id,
+                  title=cand.title[:120], rejected_candidates=rejects)
     print(f"{STEP} details: price={raw['price'].get('current')} "
           f"images={len(raw['images'])}")
-
-    # ── 2. affiliate link ───────────────────────────────────────────────
-    banner("2. AFFILIATE LINK (live IOP link.generate)")
-    t0 = time.time()
-    try:
-        affiliate_url = adapter.build_affiliate_url(
-            raw["source_url"] or cand.product_url, product_id=cand.source_product_id
-        )
-    except Exception as exc:
-        import traceback
-
-        traceback.print_exc()
-        # URL-shape matrix forensics: which source_values form does the
-        # gateway actually accept for THIS product right now?
-        matrix: dict[str, str] = {}
-        stripped = (raw.get("source_url") or "").split("?")[0]
-        bare = f"https://www.aliexpress.com/item/{cand.source_product_id}.html"
-        for label, url in (("verbatim-full", raw.get("source_url") or ""),
-                           ("stripped", stripped), ("bare-canonical", bare)):
-            try:
-                matrix[label] = adapter.build_affiliate_url(url)[:160]
-            except Exception as m_exc:
-                matrix[label] = f"FAIL {str(m_exc)[:160]}"
-        report.fail("affiliate", f"{type(exc).__name__}: {exc}",
-                    product_id=cand.source_product_id,
-                    source_url=raw.get("source_url", "")[:120],
-                    url_matrix=matrix)
-        return 1
-    print(f"{STEP} {affiliate_url}  ({time.time() - t0:.1f}s)")
-    if not affiliate_url.startswith("https://"):
-        print("!! affiliate link is not https — invalid for Pinterest")
-        report.fail("affiliate", f"non-https link: {affiliate_url[:120]}")
-        return 1
+    print(f"{STEP} affiliate link: {affiliate_url}")
     report.record("affiliate", affiliate_url=affiliate_url)
-
-    # ── 3. moderation (live, if key present) ────────────────────────────
-    banner("3. GEMINI MODERATION (live)")
-    if settings.gemini_api_key:
-        from pinner.agents import build_agents
-
-        moderator, _ = build_agents(settings.gemini_api_key)
-        verdict = moderator.review(raw)
-        print(f"{STEP} verdict={verdict.verdict} conf={verdict.confidence:.2f} "
-              f"reasons={verdict.reasons}")
-        if verdict.verdict != "APPROVE":
-            print("!! product rejected by live moderation — smoke result: VALID (pipeline correct)")
-            report.record("moderation", verdict=verdict.verdict)
-            report.finish(ok=True)
-            return 0
-        report.record("moderation", verdict=verdict.verdict)
-    else:
-        print(f"{STEP} skipped (no GEMINI_API_KEY)")
-        report.record("moderation", skipped=True)
+    report.record("moderation",
+                  verdict="APPROVE" if moderator is not None else "SKIPPED")
 
     # ── 4. image: real download + 2:3 ───────────────────────────────────
     banner("4. IMAGE PIPELINE (live download + 2:3 compositor)")
