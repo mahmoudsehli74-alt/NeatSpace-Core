@@ -82,27 +82,44 @@ def test_find_pin_by_link_returns_none_when_absent():
 # --- create pin ------------------------------------------------------------------------
 
 
-def test_create_pin_multipart_with_image_bytes():
+def test_create_pin_json_body_with_base64_image():
+    """LIVE-VALIDATED 2026-08-30: the v5 API retired the multipart upload
+    (bare 400 "Invalid request body"); pins are created via application/json
+    with media_source = {source_type, content_type, data=<base64>}."""
     fake = FakeTransport(ok({"id": "108999"}, status=201))
     result = PinterestTool(TOKEN, transport=fake).create_pin(
         board_id="board-1",
         title="The Sink Caddy",
         description="Rustproof and roomy.",
-        link="https://neatspace-kitchen.github.io/p/k.json",
+        link="https://neatspacekitchen.store/?id=k",
         image_bytes=b"JPEGDATA",
         alt_text="sink caddy",
     )
     assert result == {"pin_id": "108999", "url": "https://www.pinterest.com/pin/108999/"}
     call = fake.calls[0]
     assert call["url"].endswith("/v5/pins") and call["method"] == "POST"
-    assert call["data"] == {
-        "board_id": "board-1", "title": "The Sink Caddy",
-        "description": "Rustproof and roomy.",
-        "link": "https://neatspace-kitchen.github.io/p/k.json",
-        "alt_text": "sink caddy",
+    assert call["headers"]["Content-Type"] == "application/json"
+    assert call["headers"]["Authorization"] == f"Bearer {TOKEN}"
+    assert call["files"] is None and call["data"] is None
+    body = call["json_body"]
+    assert body["board_id"] == "board-1"
+    assert body["title"] == "The Sink Caddy"
+    assert body["description"] == "Rustproof and roomy."
+    assert body["link"] == "https://neatspacekitchen.store/?id=k"
+    assert body["alt_text"] == "sink caddy"
+    assert body["media_source"] == {
+        "source_type": "image_base64",
+        "content_type": "image/jpeg",
+        "data": base64.b64encode(b"JPEGDATA").decode("ascii"),
     }
-    name, payload, mime = call["files"]["media_source"]
-    assert name == "product.jpg" and payload == b"JPEGDATA" and mime == "image/jpeg"
+
+
+def test_create_pin_omits_alt_text_when_none():
+    fake = FakeTransport(ok({"id": "1"}, status=201))
+    PinterestTool(TOKEN, transport=fake).create_pin(
+        board_id="b", title="t", description="d", link="l", image_bytes=b"x"
+    )
+    assert "alt_text" not in fake.calls[0]["json_body"]
 
 
 def test_create_pin_error_taxonomy():
@@ -123,12 +140,16 @@ def test_create_pin_error_taxonomy():
         )
 
 
-def test_create_pin_file_field_is_configurable_for_drift():
-    fake = FakeTransport(ok({"id": "1"}, status=201))
-    PinterestTool(TOKEN, transport=fake, file_field="image").create_pin(
-        board_id="b", title="t", description="d", link="l", image_bytes=b"x"
-    )
-    assert "image" in fake.calls[0]["files"]
+def test_create_pin_error_includes_response_body():
+    """The 400-forensics lesson: the error must carry Pinterest's validation
+    body, not just the status code."""
+    fake = FakeTransport(ok({"code": 1, "message": "Invalid request body"}, status=400))
+    with pytest.raises(PermanentError) as err:
+        PinterestTool(TOKEN, transport=fake).create_pin(
+            board_id="b", title="t", description="d", link="l", image_bytes=b"x"
+        )
+    assert "HTTP 400" in str(err.value)
+    assert "Invalid request body" in str(err.value)
 
 
 # --- get pin + image download -------------------------------------------------------------

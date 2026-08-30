@@ -8,17 +8,19 @@ image + affiliate link, then delete). Productionized here with:
     between "pin created" and "status written": on recovery we search the
     board's pins for our bridge URL and ADOPT the existing pin instead of
     creating a duplicate.
-  * ``create_pin`` multipart upload (image BYTES, never hotlinked CDN URLs —
-    marketplace hotlink protection breaks image_url pins).
+  * ``create_pin`` uploads the composited image as base64 JSON —
+    ``media_source`` with source_type ``image_base64`` (never hotlinked CDN
+    URLs; marketplace hotlink protection breaks image_url pins, and the
+    2:3 composite is the whole point).
   * ``refresh_access_token`` as a standalone function the runner calls when a
     request comes back 401 (Pinterest rotates refresh tokens — the runner
     persists the new pair).
   * Error taxonomy: 401 -> PinterestTokenExpired (refresh + retry),
     429/5xx/timeouts -> TransientError, 400/403/404 -> PermanentError.
 
-Note: the multipart file part name defaults to "media_source" per the v5
-OpenAPI spec; it is a constructor parameter so a single line fixes any
-future field drift surfaced by the gated live test.
+Note: the pin image travels as JSON ``media_source`` (source_type
+``image_base64``) — live-validated 2026-08-30 after the v5 API retired the
+multipart upload with a bare 400 "Invalid request body".
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from __future__ import annotations
 import base64
 
 from pinner.errors import PermanentError, TransientError
-from pinner.tools.http import Transport, httpx_transport
+from pinner.tools.http import HttpReply, Transport, httpx_transport
 
 PINTEREST_API = "https://api.pinterest.com/v5"
 MAX_PAGES = 5
@@ -57,10 +59,15 @@ def _paged_get(transport: Transport, url: str, headers: dict) -> list[dict]:
     return items
 
 
-def _raise(status: int, action: str) -> None:
+def _raise(status: int, action: str, reply: HttpReply | None = None) -> None:
     if status == 401:
         raise PinterestTokenExpired(f"[pinterest] {action}: token expired or invalid")
     message = f"[pinterest] {action} failed with HTTP {status}"
+    if reply is not None and reply.body:
+        # 400s carry validation gold ("Invalid request: 'x' is a required
+        # property") — never discard the body again.
+        snippet = reply.body.decode("utf-8", "replace")[:220]
+        message += f" (body={snippet})"
     if status == 429 or status >= 500:
         raise TransientError(message)
     raise PermanentError(message)
@@ -111,11 +118,9 @@ class PinterestTool:
         access_token: str,
         *,
         transport: Transport | None = None,
-        file_field: str = "media_source",
     ) -> None:
         self._token = access_token
         self._transport = transport or httpx_transport
-        self._file_field = file_field
 
     def list_boards(self) -> list[dict]:
         """[{id, name}] for the token's account."""
@@ -144,20 +149,34 @@ class PinterestTool:
         image_bytes: bytes,
         alt_text: str | None = None,
     ) -> dict:
-        """Multipart pin creation with image bytes. Returns {pin_id, url}."""
-        data = {"board_id": board_id, "title": title, "description": description, "link": link}
+        """JSON-body pin creation. Returns {pin_id, url}.
+
+        LIVE-VALIDATED 2026-08-30: POST /v5/pins rejects the old multipart
+        image upload with a bare 400 "Invalid request body". The API now
+        requires application/json with media_source = {"source_type":
+        "image_base64", "content_type": "image/jpeg", "data": <base64>} —
+        the compositor's 2:3 bytes upload through "data" unchanged."""
+        payload: dict = {
+            "board_id": board_id,
+            "title": title,
+            "description": description,
+            "link": link,
+            "media_source": {
+                "source_type": "image_base64",
+                "content_type": "image/jpeg",
+                "data": base64.b64encode(image_bytes).decode("ascii"),
+            },
+        }
         if alt_text:
-            data["alt_text"] = alt_text
-        files = {self._file_field: ("product.jpg", image_bytes, "image/jpeg")}
+            payload["alt_text"] = alt_text
         reply = self._transport(
             "POST",
             f"{PINTEREST_API}/pins",
-            headers=_bearer(self._token),
-            data=data,
-            files=files,
+            headers={**_bearer(self._token), "Content-Type": "application/json"},
+            json_body=payload,
         )
         if reply.status != 201:
-            _raise(reply.status, "create pin")
+            _raise(reply.status, "create pin", reply)
         body = reply.json()
         return {
             "pin_id": body["id"],
