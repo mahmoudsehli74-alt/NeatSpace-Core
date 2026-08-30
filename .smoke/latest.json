@@ -1,23 +1,23 @@
 {
-  "run_tag": "smoke-20260830-125316-e42adf",
+  "run_tag": "smoke-20260830-152359-fee189",
   "stages": {
     "account": {
       "ok": true,
       "account": "NeatSpace Kitchen",
       "repo": "mahmoudsehli74-alt/neatspace-kitchen",
-      "domain": "neatspace-kitchen.github.io"
+      "domain": "neatspacekitchen.store"
     },
     "discover": {
       "ok": true,
       "product_id": "3256812473860035",
       "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora",
       "rejected_candidates": {
-        "3256812730338668": "REJECT: [\"Trademark violation: Unauthorized use of brand name 'Command' in product title\"]"
+        "3256812730338668": "REJECT: [\"Title uses registered trademark 'Command' (3M Company) without authorization for generic product, "
       }
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c37pcmzt"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c3ZPoJGb"
     },
     "moderation": {
       "ok": true,
@@ -31,15 +31,16 @@
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "9fb1020d0466358168b5ad12423fadd699e73099",
-      "json_url": "https://neatspace-kitchen.github.io/products/aliexpress-3256812473860035.json",
-      "deployed": false,
-      "destination": "https://neatspace-kitchen.github.io/?id=aliexpress-3256812473860035"
+      "commit_sha": "7e5ff3028f16f6298a5f22d5053f75e7aaa0ceb5",
+      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812473860035.json",
+      "deployed": true,
+      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035"
     }
   },
-  "pin_url": null,
-  "destination": null,
-  "ok": false,
-  "started": 1788094396.8289175,
-  "updated": 1788094582.1518097
+  "pin_url": "https://www.pinterest.com/pin/1089167491161854346/",
+  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035",
+  "ok": true,
+  "started": 1788103439.811609,
+  "updated": 1788103489.704357,
+  "finished": 1788103489.704355
 }
