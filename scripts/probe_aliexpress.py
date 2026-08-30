@@ -84,6 +84,11 @@ def main() -> int:
     gateways = ["https://api-sg.aliexpress.com/sync",
                 "https://api.aliexpress.com/sync"]
     shapes = [("verbatim-full", full), ("stripped", stripped), ("bare", bare)]
+
+    # MULTIPLE PRODUCTS: a single ineligible product 405s every shape; three
+    # products isolate product-eligibility from tracking-id validity.
+    for c in candidates[1:3]:
+        shapes.append(("alt-" + c.source_product_id[-6:], c.product_url.split("?")[0]))
     variants = [(0, {}), (2, {}),
                 (0, {"target_currency": "USD", "target_language": "EN"})]
     for gateway in gateways:
