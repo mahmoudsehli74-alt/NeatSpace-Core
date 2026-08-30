@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260830-101247-ff6ff2",
+  "run_tag": "smoke-20260830-101914-6f2841",
   "stages": {
     "account": {
       "ok": true,
@@ -16,7 +16,7 @@
       "ok": false,
       "error": "PermanentAdapterError: [aliexpress] biz error 405: The result is empty",
       "product_id": "3256812533119579",
-      "source_url": "https://www.aliexpress.com/item/3256812533119579.html?pdp_npi=6%40dis%21USD%214.11%214.11%21%21%2127.47%2127.47%21%40215",
+      "source_url": "https://www.aliexpress.com/item/3256812533119579.html?pdp_npi=6%40dis%21USD%214.11%214.11%21%21%2127.47%2127.47%21%40210",
       "url_matrix": {
         "verbatim-full": "FAIL [aliexpress] biz error 405: The result is empty",
         "stripped": "FAIL [aliexpress] biz error 405: The result is empty",
@@ -27,6 +27,6 @@
   "pin_url": null,
   "destination": null,
   "ok": false,
-  "started": 1788084767.579846,
-  "updated": 1788084776.7901027
+  "started": 1788085154.7768915,
+  "updated": 1788085165.6958427
 }
