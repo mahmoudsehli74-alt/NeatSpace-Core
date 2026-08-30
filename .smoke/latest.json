@@ -1,16 +1,38 @@
 {
-  "run_tag": "smoke-20260830-120351-543676",
+  "run_tag": "smoke-20260830-121344-9ada54",
   "stages": {
     "account": {
       "ok": true,
       "account": "NeatSpace Kitchen",
       "repo": "mahmoudsehli74-alt/neatspace-kitchen",
       "domain": "neatspace-kitchen.github.io"
+    },
+    "discover": {
+      "ok": true,
+      "product_id": "3256812473860035",
+      "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora",
+      "rejected_candidates": {
+        "3256812730338668": "REJECT: [\"Unauthorized use of trademarked brand name 'Command' in product title\"]"
+      }
+    },
+    "affiliate": {
+      "ok": true,
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c32orwvZ"
+    },
+    "moderation": {
+      "ok": true,
+      "verdict": "APPROVE"
+    },
+    "image": {
+      "ok": true,
+      "width": 800,
+      "height": 1200,
+      "source_bytes": 70456
     }
   },
   "pin_url": null,
   "destination": null,
   "ok": false,
-  "started": 1788091431.34281,
-  "updated": 1788091432.6909335
+  "started": 1788092024.7906299,
+  "updated": 1788092087.206171
 }
