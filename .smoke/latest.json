@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260830-101914-6f2841",
+  "run_tag": "smoke-20260830-115857-a6c956",
   "stages": {
     "account": {
       "ok": true,
@@ -9,24 +9,22 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812533119579",
-      "title": "Phone Charging Stand Wall-Mount Adhesive Bracket Easy Install for Shower Kitchen Bedroom Office Phone Organizer Holder S"
+      "product_id": "3256812730338668",
+      "title": "One Adhesive Command Wall Organizer | Hands-Free Charging Station & Remote Control Holder for Living Room, Bedroom, Kitc"
     },
     "affiliate": {
-      "ok": false,
-      "error": "PermanentAdapterError: [aliexpress] biz error 405: The result is empty",
-      "product_id": "3256812533119579",
-      "source_url": "https://www.aliexpress.com/item/3256812533119579.html?pdp_npi=6%40dis%21USD%214.11%214.11%21%21%2127.47%2127.47%21%40210",
-      "url_matrix": {
-        "verbatim-full": "FAIL [aliexpress] biz error 405: The result is empty",
-        "stripped": "FAIL [aliexpress] biz error 405: The result is empty",
-        "bare-canonical": "FAIL [aliexpress] biz error 405: The result is empty"
-      }
+      "ok": true,
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c3fbn9eX"
+    },
+    "moderation": {
+      "ok": true,
+      "verdict": "REJECT"
     }
   },
   "pin_url": null,
   "destination": null,
-  "ok": false,
-  "started": 1788085154.7768915,
-  "updated": 1788085165.6958427
+  "ok": true,
+  "started": 1788091137.9766681,
+  "updated": 1788091151.0362527,
+  "finished": 1788091151.0362515
 }
