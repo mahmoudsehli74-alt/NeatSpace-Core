@@ -86,8 +86,10 @@ def test_call_builds_and_signs_the_form():
     assert form["app_key"] == APP_KEY
     assert form["format"] == "json" and form["v"] == "2.0" and form["sign_method"] == "md5"
     assert form["timestamp"].isdigit()  # milliseconds
-    # lists travel as compact JSON strings (source_values — the current param)
-    assert form["source_values"] == '["https://www.aliexpress.com/item/1.html"]'
+    # LIVE-VALIDATED: source_values is the PLAIN URL string. The JSON-array
+    # encoding is treated as literal text by the product matcher and every
+    # request fails with 405 "The result is empty".
+    assert form["source_values"] == 'https://www.aliexpress.com/item/1.html'
     assert form["tracking_id"] == TRACKING_ID
     # the signature covers every field EXCEPT itself, and matches a recompute
     unsigned = {k: v for k, v in form.items() if k != "sign"}
@@ -483,7 +485,7 @@ def test_link_generate_payload_carries_promotion_link_type():
     form = posted[0]["form"]
     assert form["method"] == "aliexpress.affiliate.link.generate"
     assert form["promotion_link_type"] == "0"          # standard promotion link
-    assert form["source_values"].startswith('["https://')
+    assert form["source_values"].startswith('https://')
     assert form["tracking_id"] == TRACKING_ID
     unsigned = {k: v for k, v in form.items() if k != "sign"}
     assert form["sign"] == ax.sign_md5(APP_SECRET, unsigned)
@@ -561,7 +563,7 @@ def test_link_generate_passes_url_verbatim_first():
         "https://www.aliexpress.com/item/1005006123456789.html?spm=a2g0o.1"
     )
     assert posted[0]["form"]["source_values"] == (
-        '["https://www.aliexpress.com/item/1005006123456789.html?spm=a2g0o.1"]'
+        'https://www.aliexpress.com/item/1005006123456789.html?spm=a2g0o.1'
     )
 
 
@@ -574,7 +576,7 @@ def test_link_generate_synthesizes_when_url_missing():
     )
     adapter.build_affiliate_url("", product_id="100500222")
     assert posted[0]["form"]["source_values"] == (
-        '["https://www.aliexpress.com/item/100500222.html"]'
+        'https://www.aliexpress.com/item/100500222.html'
     )
 
 
@@ -604,7 +606,55 @@ def test_405_empty_result_retries_with_canonical_form():
     assert len(attempts) == 2
     # first verbatim, second canonical
     assert "spm=zzz" in attempts[0]
-    assert attempts[1] == '["https://www.aliexpress.com/item/1005006123456789.html"]'
+    assert attempts[1] == 'https://www.aliexpress.com/item/1005006123456789.html'
+
+
+# --- LIVE 2026-08-30: source_values encoding is the 405 root cause ---------------
+
+
+def test_source_values_plain_string_contract():
+    """Recorded from the live gateway (run_tag link-matrix forensics): the SAME
+    request, same tracker, same product —
+      source_values=<plain url>        -> 200 + s.click deep link (aff_fcid)
+      source_values='["<url>"]' (JSON) -> 405 "The result is empty"
+    The gateway treats the JSON-array encoding as literal text, so the product
+    matcher never hits. This test pins the plain-string encoding forever."""
+    adapter, posted = make_adapter(
+        lambda form: _ok(
+            "aliexpress.affiliate.link.generate",
+            {"promotion_links": [{"promotion_link": "https://s.click.aliexpress.com/e/_c2zUfGQF"}]},
+        )
+    )
+    url = adapter.build_affiliate_url("https://www.aliexpress.com/item/3256812533119579.html")
+    assert url == "https://s.click.aliexpress.com/e/_c2zUfGQF"
+    sent = posted[0]["form"]["source_values"]
+    assert sent == "https://www.aliexpress.com/item/3256812533119579.html"
+    # the poison encodings must never come back
+    assert not sent.startswith("[")
+    assert '"' not in sent and "'" not in sent
+    # the signature must cover the plain form (recompute independently)
+    unsigned = {k: v for k, v in posted[0]["form"].items() if k != "sign"}
+    assert posted[0]["form"]["sign"] == ax.sign_md5(APP_SECRET, unsigned)
+
+
+def test_json_array_encoding_guard():
+    """Control: if anyone reintroduces the JSON-array encoding, fail loudly at
+    the transport boundary — that encoding is syntactically accepted by the
+    gateway and returns business 405 'The result is empty' (the invisible
+    three-week incident), never a param error."""
+    def transport(url, form):
+        assert not form["source_values"].startswith("["), (
+            "source_values must be a plain string — see live forensics 2026-08-30"
+        )
+        body = json.dumps({
+            "aliexpress_affiliate_link_generate_response": {
+                "resp_result": {"resp_code": 405, "resp_msg": "The result is empty"}}})
+        return 200, body
+
+    adapter = ax.AliExpressAdapter(APP_KEY, APP_SECRET, TRACKING_ID, transport=transport)
+    with pytest.raises(PermanentAdapterError) as err:
+        adapter.build_affiliate_url("https://www.aliexpress.com/item/3256812533119579.html")
+    assert "405" in str(err.value)
 
 
 def test_resp_code_alias_classifies_errors():

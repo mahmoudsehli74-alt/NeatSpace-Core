@@ -4,7 +4,9 @@ Live behavior validated by the user in Phase 0:
   * MD5 signature generation over sorted form parameters (secret-wrapped)
   * affiliate link generation via ``aliexpress.affiliate.link.generate`` with
     ``source_values`` (the current parameter; the old ``target_url``/
-    ``target_values`` forms are retired) — HTTP 200 with a real tracking link
+    ``target_values`` forms are retired) — HTTP 200 with a real tracking link.
+    ``source_values`` carries the URL as a PLAIN STRING (live-validated:
+    the JSON-array encoding is rejected with an empty 405 result)
 
 Design:
   * The HTTP layer is an injectable ``transport`` callable so contract tests
@@ -443,8 +445,13 @@ class AliExpressAdapter:
 
     def _generate_link(self, attempt_url: str) -> str:
         params = {
-            # source_values is the CURRENT parameter (target_url is retired)
-            "source_values": [attempt_url],
+            # LIVE-VALIDATED 2026-08-30: source_values MUST be the plain URL
+            # string. The JSON-array form ('["<url>"]') is silently treated as
+            # literal text by the gateway — the product matcher can never hit
+            # and every request returns 405 "The result is empty" (the
+            # three-week go-live incident). Plain string returns a real
+            # s.click.aliexpress.com deep link carrying aff_fcid attribution.
+            "source_values": attempt_url,
             "tracking_id": self._tracking_id,
             # Live-gateway mandatory (go-launch incident): without it the IOP
             # rejects with MissingParameter. 0 = standard promotion link.

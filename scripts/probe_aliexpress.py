@@ -34,7 +34,10 @@ def raw_link_call(settings, gateway: str, url: str, link_type: int,
         "format": "json",
         "v": "2.0",
         "sign_method": "md5",
-        "source_values": json.dumps([url], separators=(",", ":")),
+        # LIVE-VALIDATED 2026-08-30: plain string. JSON-array encoding
+        # returns 405 "The result is empty" on every product (root cause of
+        # the go-live incident).
+        "source_values": url,
         "tracking_id": settings.aliexpress_tracking_id,
         "promotion_link_type": str(link_type),
         **{k: str(v) for k, v in extra.items()},
@@ -90,7 +93,8 @@ def main() -> int:
     for c in candidates[1:3]:
         shapes.append(("alt-" + c.source_product_id[-6:], c.product_url.split("?")[0]))
     variants = [(0, {}), (2, {}),
-                (0, {"target_currency": "USD", "target_language": "EN"})]
+                (0, {"target_currency": "USD", "target_language": "EN"}),
+                (1, {})]
     for gateway in gateways:
         for link_type, extra in variants:
             for shape_label, url in shapes:
