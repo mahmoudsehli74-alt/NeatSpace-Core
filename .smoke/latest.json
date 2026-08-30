@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260830-123440-04b02e",
+  "run_tag": "smoke-20260830-125316-e42adf",
   "stages": {
     "account": {
       "ok": true,
@@ -12,12 +12,12 @@
       "product_id": "3256812473860035",
       "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora",
       "rejected_candidates": {
-        "3256812730338668": "REJECT: [\"Unauthorized use of the registered trademark 'Command' in product title/description for a generic "
+        "3256812730338668": "REJECT: [\"Trademark violation: Unauthorized use of brand name 'Command' in product title\"]"
       }
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c45Dv0E3"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c37pcmzt"
     },
     "moderation": {
       "ok": true,
@@ -30,14 +30,16 @@
       "source_bytes": 70456
     },
     "bridge": {
-      "ok": false,
-      "error": "PermanentError: [github] commit bridge file failed with HTTP 403",
-      "hint": "BRIDGE_PAT needs Contents:Read+write on the storefront repo (fine-grained PAT permission)"
+      "ok": true,
+      "commit_sha": "9fb1020d0466358168b5ad12423fadd699e73099",
+      "json_url": "https://neatspace-kitchen.github.io/products/aliexpress-3256812473860035.json",
+      "deployed": false,
+      "destination": "https://neatspace-kitchen.github.io/?id=aliexpress-3256812473860035"
     }
   },
   "pin_url": null,
   "destination": null,
   "ok": false,
-  "started": 1788093280.124254,
-  "updated": 1788093301.5917368
+  "started": 1788094396.8289175,
+  "updated": 1788094582.1518097
 }
