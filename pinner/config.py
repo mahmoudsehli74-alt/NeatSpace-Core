@@ -79,6 +79,14 @@ def missing_credentials(settings: Settings, feature: str) -> list[str]:
     return [name for name in CREDENTIAL_REQUIREMENTS.get(feature, ()) if not values.get(name)]
 
 
+PLACEHOLDER_CREDENTIAL_VALUES = ("default", "your_api_key", "your-api-key",
+                                 "your_api_key_here", "changeme", "xxx", "test")
+
+
+def _is_placeholder(value: str) -> bool:
+    return value.strip().lower() in PLACEHOLDER_CREDENTIAL_VALUES
+
+
 def require_credentials(settings: Settings, *features: str) -> None:
     """Fail fast BEFORE spending API calls when integration secrets are absent.
 
@@ -91,15 +99,36 @@ def require_credentials(settings: Settings, *features: str) -> None:
         missing = missing_credentials(settings, feature)
         if missing:
             problems[feature] = missing
-    if problems:
+
+    # Placeholder sweep: a value like ALIEXPRESS_TRACKING_ID='default' passes
+    # the presence check but poisons the vendor gateway downstream (the live
+    # 405 "The result is empty" incident). Catch it here, by NAME.
+    values = {
+        "ALIEXPRESS_APP_KEY": settings.aliexpress_app_key,
+        "ALIEXPRESS_APP_SECRET": settings.aliexpress_app_secret,
+        "ALIEXPRESS_TRACKING_ID": settings.aliexpress_tracking_id,
+        "GEMINI_API_KEY": settings.gemini_api_key,
+        "PINTEREST_APP_ID": settings.pinterest_app_id,
+        "PINTEREST_APP_SECRET": settings.pinterest_app_secret,
+        "BRIDGE_PAT": settings.bridge_pat,
+    }
+    placeholders = [
+        f"{name} is set to the PLACEHOLDER {value!r}"
+        for name, value in values.items()
+        if value and _is_placeholder(value)
+    ]
+
+    if problems or placeholders:
         lines = [
             f"{feature}: missing {', '.join(names)}"
             for feature, names in problems.items()
-        ]
+        ] + placeholders
         raise RuntimeError(
-            "missing required credentials:\n  "
+            "credential validation failed:\n  "
             + "\n  ".join(lines)
-            + "\nFix GitHub Secrets (or local .env); names are case-sensitive."
+            + "\nFix GitHub Secrets (or local .env); names are case-sensitive. "
+            "ALIEXPRESS_TRACKING_ID must be the real tracking id from the "
+            "AliExpress Portals console (not 'default')."
         )
 
 

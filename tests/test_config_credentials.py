@@ -69,3 +69,29 @@ def test_dry_run_does_not_require_pinterest(settings, monkeypatch):
     require_credentials(fresh, "aliexpress", "gemini")  # ok without pinterest
     with pytest.raises(RuntimeError):
         require_credentials(fresh, "pinterest")
+
+
+def test_placeholder_tracking_id_is_rejected(settings, monkeypatch):
+    """The live 405 root cause: ALIEXPRESS_TRACKING_ID='default' passes the
+    presence check but poisons link.generate. The validator must catch it."""
+    monkeypatch.setenv("ALIEXPRESS_APP_KEY", "537558")
+    monkeypatch.setenv("ALIEXPRESS_APP_SECRET", "a" * 32)
+    monkeypatch.setenv("ALIEXPRESS_TRACKING_ID", "default")
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    from pinner.config import load_settings
+
+    fresh = load_settings(env_file=Path("__definitely_missing__.env"))
+    with pytest.raises(RuntimeError) as err:
+        require_credentials(fresh, "aliexpress", "gemini")
+    assert "PLACEHOLDER" in str(err.value) and "ALIEXPRESS_TRACKING_ID" in str(err.value)
+
+
+def test_real_looking_tracking_id_passes(settings, monkeypatch):
+    monkeypatch.setenv("ALIEXPRESS_APP_KEY", "537558")
+    monkeypatch.setenv("ALIEXPRESS_APP_SECRET", "a" * 32)
+    monkeypatch.setenv("ALIEXPRESS_TRACKING_ID", "ncqshGmQBT8")
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    from pinner.config import load_settings
+
+    fresh = load_settings(env_file=Path("__definitely_missing__.env"))
+    require_credentials(fresh, "aliexpress", "gemini")  # no raise
