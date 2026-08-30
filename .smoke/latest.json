@@ -1,30 +1,16 @@
 {
-  "run_tag": "smoke-20260830-115857-a6c956",
+  "run_tag": "smoke-20260830-120351-543676",
   "stages": {
     "account": {
       "ok": true,
       "account": "NeatSpace Kitchen",
       "repo": "mahmoudsehli74-alt/neatspace-kitchen",
       "domain": "neatspace-kitchen.github.io"
-    },
-    "discover": {
-      "ok": true,
-      "product_id": "3256812730338668",
-      "title": "One Adhesive Command Wall Organizer | Hands-Free Charging Station & Remote Control Holder for Living Room, Bedroom, Kitc"
-    },
-    "affiliate": {
-      "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3fbn9eX"
-    },
-    "moderation": {
-      "ok": true,
-      "verdict": "REJECT"
     }
   },
   "pin_url": null,
   "destination": null,
-  "ok": true,
-  "started": 1788091137.9766681,
-  "updated": 1788091151.0362527,
-  "finished": 1788091151.0362515
+  "ok": false,
+  "started": 1788091431.34281,
+  "updated": 1788091432.6909335
 }
