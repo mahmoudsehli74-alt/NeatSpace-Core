@@ -201,6 +201,7 @@ def main() -> int:
                   f"— raw keys: {sorted(probe.keys())} — skipping")
             rejects[pid] = f"malformed payload (title={bool(title)}, images={len(images)})"
             continue
+        report.record("discover", product_id=pid, title=candidate.title[:120])
         try:
             link = adapter.build_affiliate_url(
                 probe.get("source_url") or candidate.product_url,
@@ -215,8 +216,25 @@ def main() -> int:
             print(f"{STEP} candidate {index} ({pid}) non-https link — skipping")
             rejects[pid] = f"non-https link: {link[:80]}"
             continue
+        report.record("affiliate", affiliate_url=link[:160])
         if moderator is not None:
-            verdict = moderator.review(probe)
+            verdict = None
+            for attempt in (1, 2):
+                try:
+                    verdict = moderator.review(probe)
+                    break
+                except Exception as exc:
+                    # gemini free tier throws transient 503 "high demand"
+                    # spikes — back off once, then let the next candidate
+                    # (whose review comes later in time) carry on.
+                    print(f"{STEP} candidate {index} ({pid}) moderation call "
+                          f"failed (attempt {attempt}/2): {type(exc).__name__}: "
+                          f"{str(exc)[:140]}")
+                    if attempt == 1:
+                        time.sleep(20)
+            if verdict is None:
+                rejects[pid] = "moderation unavailable (transient agent error)"
+                continue
             print(f"{STEP} candidate {index} ({pid}) moderation: "
                   f"{verdict.verdict} conf={verdict.confidence:.2f} "
                   f"reasons={verdict.reasons}")
