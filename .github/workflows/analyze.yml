@@ -39,6 +39,10 @@ jobs:
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           MONGO_DB: ${{ secrets.MONGO_DB }}
+          # load_settings() requires this even though the analyst itself
+          # never decrypts tokens — without it the step died in 28s on
+          # every scheduled run since go-live (audit 2026-09-01).
+          TOKEN_MASTER_KEY: ${{ secrets.TOKEN_MASTER_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

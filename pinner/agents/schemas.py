@@ -22,6 +22,10 @@ class ModerationVerdict(BaseModel):
 
 
 class StrategyContent(BaseModel):
+    # extra="allow" carries guardrail-repair metadata (repairs/repair_note,
+    # audit 2026-09-01) without polluting the Gemini response_schema.
+    model_config = {"extra": "allow"}
+
     title: str = Field(max_length=95, description="Pinterest pin title")
     description: str = Field(max_length=480, description="Pinterest pin description")
     hashtags: list[str] = Field(min_length=2, max_length=8)

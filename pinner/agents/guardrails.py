@@ -78,3 +78,93 @@ def check_strategy(content: StrategyContent, niche: dict, boards: list[str]) -> 
 
     if problems:
         raise GuardrailError("; ".join(problems))
+
+
+# --- repair pass (audit 2026-09-01) --------------------------------------------
+# Live evidence: 5 of 8 pin docs went DEAD on REPAIRABLE strategist output —
+# 3x malformed hashtags (e.g. '#selfcare mebd' — model emitted words after
+# the tag), 2x board_choice hallucination ('Kitchen Hacks & Organization'
+# does not exist on the account). Deterministic repair before the hard check
+# keeps the safety gate intact while saving the product.
+
+
+def _slugify_tag(text: str) -> str | None:
+    """'#kitchen organization!' -> '#kitchenorganization'; None if nothing
+    salvageable. Pure — used by repair_strategy and its tests."""
+    stripped = text.strip()
+    if not stripped.startswith("#"):
+        stripped = "#" + stripped
+    body = re.sub(r"[^A-Za-z0-9_]", "", stripped[1:])
+    if not (2 <= len(body) <= 29):
+        return None
+    return f"#{body}"
+
+
+def repair_strategy(content: StrategyContent, niche: dict, boards: list[str]) -> StrategyContent:
+    """Best-effort deterministic repair of model output BEFORE the hard
+    check_strategy gate. Returns a (possibly) corrected copy; callers must
+    still run check_strategy — anything unrepairable still poisons.
+
+    Repairs (each observed live):
+      * malformed hashtags: salvage the tag body ('#selfcare mebd' ->
+        '#selfcaremebd' if the trailing junk merges into one token, else
+        drop); dedupe; clamp to the niche count range (pad from niche
+        keywords, trim overflow).
+      * hallucinated board_choice: exact match first, then
+        case/insensitive/substring match against the REAL boards; if the
+        model named a real board with different casing/wording, snap it.
+        No match at all -> first board (the allocator orders uncovered
+        boards first, so this is also the coverage-optimal choice).
+    """
+    data = content.model_dump()
+    changed: list[str] = []
+
+    # hashtags: repair, dedupe, count-clamp
+    lo, hi = (niche.get("content_style") or {}).get("hashtag_count_range", [3, 6])
+    lo = max(lo, 2)  # schema floor: StrategyContent enforces min_length=2
+    repaired: list[str] = []
+    for tag in data.get("hashtags") or []:
+        fixed = tag if HASHTAG_RE.match(tag) else _slugify_tag(tag)
+        # 'a me b' style junk ('#tag junk junk') can merge real words into
+        # gibberish; only accept repairs that keep a single token
+        if fixed and fixed not in repaired:
+            repaired.append(fixed)
+    if len(repaired) < lo:
+        # pad in priority order: niche board_keywords first, then words
+        # from the pin title itself — deterministic, never empty, on-topic.
+        pad_candidates = [kw.replace(" ", "") for kw in niche.get("board_keywords") or []]
+        pad_candidates += re.findall(r"[A-Za-z]{4,}", data.get("title") or "")
+        for cand in pad_candidates:
+            pad = _slugify_tag("#" + cand)
+            if pad and pad not in repaired:
+                repaired.append(pad)
+            if len(repaired) >= lo:
+                break
+    if len(repaired) > hi:
+        repaired = repaired[:hi]
+    if repaired != data.get("hashtags"):
+        changed.append("hashtags")
+        data["hashtags"] = repaired
+
+    # board_choice: snap hallucinations to a real board
+    choice = data.get("board_choice") or ""
+    if boards and choice not in boards:
+        fixed = None
+        if choice:
+            lowered = {b.lower(): b for b in boards}
+            fixed = lowered.get(choice.lower())
+            if not fixed:
+                for b in boards:
+                    if choice.lower() in b.lower() or b.lower() in choice.lower():
+                        fixed = b
+                        break
+        if fixed is None:
+            fixed = boards[0]
+        if fixed != choice:
+            changed.append("board_choice")
+            data["board_choice"] = fixed
+
+    if changed:
+        data["repairs"] = changed
+        data["repair_note"] = f"auto-repaired by guardrails: {', '.join(changed)}"
+    return StrategyContent.model_validate(data)

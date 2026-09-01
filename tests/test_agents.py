@@ -29,7 +29,7 @@ from pinner.agents import (
     build_agents,
     prompts,
 )
-from pinner.agents.guardrails import check_strategy, check_verdict
+from pinner.agents.guardrails import check_strategy, check_verdict, repair_strategy
 from pinner.agents.schemas import ModerationVerdict, StrategyContent
 
 CLEAN_RAW = {
@@ -295,3 +295,72 @@ def test_live_strategist():
     content = strategist.create(CLEAN_RAW, KITCHEN_NICHE, BOARDS)
     assert content.board_choice in BOARDS
     assert content.disclosure is True
+
+
+# --- repair pass (live audit 2026-09-01: 5/8 pin docs DEAD on repairable output) ---
+
+
+
+def test_repair_slavages_malformed_hashtags():
+    """LIVE fixture: Gemini emitted '#selfcare mebd' — junk words after the
+    tag body. repair must salvage a single-token tag, not poison the product."""
+    content = good_strategy(hashtags=["#selfcare mebd", "#kitchendecor", "#storageideas"])
+    fixed = repair_strategy(content, KITCHEN_NICHE, BOARDS)
+    assert fixed.hashtags == ["#selfcaremebd", "#kitchendecor", "#storageideas"]
+    check_strategy(fixed, KITCHEN_NICHE, BOARDS)  # passes the hard gate now
+
+
+def test_repair_dedupes_and_pads_to_niche_range():
+    """LIVE fixture: 'hashtag count 2 outside niche range 3..6' + dupes."""
+    content = good_strategy(hashtags=["#kitchenorganization", "#kitchenorganization"])
+    fixed = repair_strategy(content, KITCHEN_NICHE, BOARDS)
+    lo, hi = KITCHEN_NICHE["content_style"]["hashtag_count_range"]
+    assert lo <= len(fixed.hashtags) <= hi
+    assert len(set(fixed.hashtags)) == len(fixed.hashtags)
+    check_strategy(fixed, KITCHEN_NICHE, BOARDS)
+
+
+def test_repair_snaps_hallucinated_board_to_real_board():
+    """LIVE fixture: strategist picked 'Kitchen Hacks & Organization' which
+    does not exist on the account. Repair snaps substring/fuzzy matches to
+    the real board name."""
+    content = good_strategy(board_choice="Kitchen Hacks & Organization")
+    fixed = repair_strategy(content, KITCHEN_NICHE, BOARDS)
+    assert fixed.board_choice == "Kitchen Organization"
+    check_strategy(fixed, KITCHEN_NICHE, BOARDS)
+
+
+def test_repair_board_case_insensitive_and_fallback():
+    ci = good_strategy(board_choice="meal prep")
+    assert repair_strategy(ci, KITCHEN_NICHE, BOARDS).board_choice == "Meal Prep"
+    # no resemblance at all -> first board (coverage-optimal; allocator
+    # orders uncovered boards first)
+    wild = good_strategy(board_choice="Someplace Totally Elsewhere")
+    assert repair_strategy(wild, KITCHEN_NICHE, BOARDS).board_choice == BOARDS[0]
+
+
+def test_repair_records_metadata_but_not_rendered():
+    content = good_strategy(hashtags=["#bad tag!", "#kitchendecor", "#storageideas"])
+    fixed = repair_strategy(content, KITCHEN_NICHE, BOARDS)
+    assert fixed.model_dump().get("repairs") == ["hashtags"]
+    # board_choice untouched when already valid
+    ok = repair_strategy(good_strategy(), KITCHEN_NICHE, BOARDS)
+    assert ok.model_dump().get("repairs") is None
+
+
+def test_strategist_applies_repair_before_hard_gate(monkeypatch):
+    """End-to-end: the Strategist.create pipeline runs repair_strategy and a
+    REPAIRABLE output no longer poisons (was: GuardrailError -> DEAD)."""
+    from tests.test_agents import Strategist as _S  # noqa: F401  (import clarity)
+
+    class FakeClient:
+        def generate(self, *, system, user, schema):
+            return good_strategy(
+                hashtags=["#kitchenorganization junk", "#kitchendecor", "#storageideas"],
+                board_choice="Kitchen Organization Ideas",  # hallucinated
+            )
+
+    strategist = Strategist(FakeClient())
+    content = strategist.create(CLEAN_RAW, KITCHEN_NICHE, BOARDS)
+    assert content.board_choice in BOARDS
+    assert all(t.startswith("#") and " " not in t for t in content.hashtags)
