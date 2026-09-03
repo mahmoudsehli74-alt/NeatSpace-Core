@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260903-195302-7d83c2",
+  "run_tag": "smoke-20260903-201033-2dc7d1",
   "stages": {
     "account": {
       "ok": true,
@@ -15,7 +15,7 @@
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3hcpv8D"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c4LYDAc5"
     },
     "moderation": {
       "ok": true,
@@ -29,7 +29,7 @@
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "85afba25dcb0a1232bff85b11711d903b9e98239",
+      "commit_sha": "b629b86542cb69e99c502c172c8338d844f8bedb",
       "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812903620034.json",
       "deployed": true,
       "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034"
@@ -38,7 +38,7 @@
   "pin_url": "https://www.pinterest.com/pin/1089167491162180263/",
   "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034",
   "ok": true,
-  "started": 1788465182.8206937,
-  "updated": 1788465215.337794,
-  "finished": 1788465215.3377929
+  "started": 1788466233.8820627,
+  "updated": 1788466244.7461226,
+  "finished": 1788466244.7461214
 }
