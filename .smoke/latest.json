@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260901-230323-ec9d0c",
+  "run_tag": "smoke-20260903-190424-2693ca",
   "stages": {
     "account": {
       "ok": true,
@@ -9,13 +9,13 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812184559268",
-      "title": "Spice Rack Kitchen Cabinet Organizer- 3 Tier Bamboo Expandable Display Shelf, Bamboo 3-Layer Adjustable Spice Rack-A79M",
+      "product_id": "3256812903620034",
+      "title": "Adhesive Wall Phone Holder Premium Acrylic Wall Mount Phone Bracket Smartphone Storage Organizer for Home Office Kitchen",
       "rejected_candidates": {}
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3OoibaP"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c3kLrXot"
     },
     "moderation": {
       "ok": true,
@@ -23,22 +23,22 @@
     },
     "image": {
       "ok": true,
-      "width": 821,
-      "height": 1232,
-      "source_bytes": 23394
+      "width": 1000,
+      "height": 1500,
+      "source_bytes": 15872
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "33ff6d511355074a8998deb8fb147babc78487a6",
-      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812184559268.json",
+      "commit_sha": "6fb37faef00422d2694f00cfede215ff29c4d842",
+      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812903620034.json",
       "deployed": true,
-      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812184559268"
+      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034"
     }
   },
-  "pin_url": "https://www.pinterest.com/pin/1089167491162041622/",
-  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812184559268",
+  "pin_url": "https://www.pinterest.com/pin/1089167491162180263/",
+  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034",
   "ok": true,
-  "started": 1788303803.8782518,
-  "updated": 1788303846.5127237,
-  "finished": 1788303846.5127225
+  "started": 1788462264.610715,
+  "updated": 1788462328.7340608,
+  "finished": 1788462328.7340596
 }
