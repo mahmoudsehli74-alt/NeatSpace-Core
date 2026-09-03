@@ -165,6 +165,7 @@ class Runner:
         try:
             self.products.sweep(run_id=self.run_id, now=self.now())
             self.pins.sweep(run_id=self.run_id, now=self.now())
+            self._requeue_orphaned_approvals()
             self._discover()
             self._fetch_stage()
             self._moderation_stage()
@@ -218,6 +219,44 @@ class Runner:
                 self.stats["discovered"] += 1
                 if status == "created":
                     self.stats["new_products"] += 1
+
+    def _requeue_orphaned_approvals(self) -> None:
+        """Self-heal (audit 2026-09-03): an APPROVED product with NO pin doc
+        for a matching account can never publish — pin docs are only created
+        at moderation time, so any APPROVED product left without one (e.g.
+        DEAD pin docs cleaned up after an incident) is silently orphaned.
+        Backfill a QUEUED pin doc per (account, orphaned product)."""
+        accounts_by_niche: dict = {}
+        for account in self.db.accounts.find(
+            {"status": {"$in": ["ACTIVE", "WARMUP"]}}, {"niche_id": 1}
+        ):
+            accounts_by_niche.setdefault(account.get("niche_id"), []).append(account)
+        backfilled = 0
+        for prod in self.db.products.find({"status": "APPROVED"}, {"discovered_niche_id": 1}):
+            nid = prod.get("discovered_niche_id")
+            for account in accounts_by_niche.get(nid, []):
+                exists = self.db.pins.find_one(
+                    {"account_id": str(account["_id"]), "product_id": prod["_id"]},
+                    {"_id": 1},
+                )
+                if exists:
+                    continue
+                now = self.now()
+                self.db.pins.insert_one({
+                    "account_id": str(account["_id"]),
+                    "product_id": prod["_id"],
+                    "status": "QUEUED",
+                    "attempt": {"count": 0, "last_error": None, "last_error_at": None,
+                                "last_error_class": None, "next_attempt_at": None},
+                    "created_at": now, "updated_at": now,
+                })
+                backfilled += 1
+        if backfilled:
+            self.stats["orphan_approvals_requeued"] = backfilled
+            self._alert(
+                f"[{self.run_id}] backfilled {backfilled} orphaned APPROVED "
+                f"products into the pin queue"
+            )
 
     def _fetch_stage(self) -> None:
         for _ in range(self.cfg.fetch_budget):
