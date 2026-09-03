@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class ModerationVerdict(BaseModel):
@@ -22,10 +22,6 @@ class ModerationVerdict(BaseModel):
 
 
 class StrategyContent(BaseModel):
-    # extra="allow" carries guardrail-repair metadata (repairs/repair_note,
-    # audit 2026-09-01) without polluting the Gemini response_schema.
-    model_config = {"extra": "allow"}
-
     title: str = Field(max_length=95, description="Pinterest pin title")
     description: str = Field(max_length=480, description="Pinterest pin description")
     hashtags: list[str] = Field(min_length=2, max_length=8)
@@ -34,6 +30,12 @@ class StrategyContent(BaseModel):
     disclosure: bool = Field(
         default=True, description="affiliate disclosure acknowledgment — must be true"
     )
+    # Guardrail-repair metadata (audit 2026-09-01) lives on a private
+    # ClassVar-excluded field — NEVER in model fields, because extra
+    # fields/metadata leak into the Gemini response_schema as
+    # additionalProperties, which the API hard-rejects ("only supported in
+    # Gemini Enterprise"): 30+ pins went DEAD on 2026-09-02/03.
+    _repairs: list[str] = PrivateAttr(default_factory=list)
 
 
 class ProposalItem(BaseModel):

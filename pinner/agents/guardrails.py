@@ -164,7 +164,9 @@ def repair_strategy(content: StrategyContent, niche: dict, boards: list[str]) ->
             changed.append("board_choice")
             data["board_choice"] = fixed
 
-    if changed:
-        data["repairs"] = changed
-        data["repair_note"] = f"auto-repaired by guardrails: {', '.join(changed)}"
-    return StrategyContent.model_validate(data)
+    rebuilt = StrategyContent.model_validate(data)
+    # repair metadata rides on a PrivateAttr — extra model fields would leak
+    # into the Gemini response_schema as additionalProperties and the API
+    # rejects the whole request (the 2026-09-02/03 outage).
+    rebuilt._repairs = changed
+    return rebuilt

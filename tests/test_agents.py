@@ -342,10 +342,25 @@ def test_repair_board_case_insensitive_and_fallback():
 def test_repair_records_metadata_but_not_rendered():
     content = good_strategy(hashtags=["#bad tag!", "#kitchendecor", "#storageideas"])
     fixed = repair_strategy(content, KITCHEN_NICHE, BOARDS)
-    assert fixed.model_dump().get("repairs") == ["hashtags"]
-    # board_choice untouched when already valid
+    # metadata rides on a PrivateAttr: invisible to model_dump AND to the
+    # Gemini response_schema (extra fields caused the 2026-09-02/03 outage)
+    assert fixed._repairs == ["hashtags"]
+    assert "repairs" not in fixed.model_dump()
     ok = repair_strategy(good_strategy(), KITCHEN_NICHE, BOARDS)
-    assert ok.model_dump().get("repairs") is None
+    assert ok._repairs == []
+
+
+def test_strategy_schema_never_leaks_additional_properties():
+    """THE 2026-09-02/03 OUTAGE REGRESSION: extra='allow' on StrategyContent
+    made the pydantic schema serialize with additionalProperties, which the
+    Gemini API hard-rejects ('additionalProperties is only supported in
+    Gemini Enterprise Agent Platform') — 30+ pins went DEAD across all
+    three accounts for 2 days. Pins the wire contract forever."""
+    dumped = StrategyContent.model_json_schema()
+    assert "additionalProperties" not in dumped, (
+        f"schema leaked additionalProperties: {dumped.get('additionalProperties')}"
+    )
+    assert StrategyContent.model_config.get("extra") != "allow"
 
 
 def test_strategist_applies_repair_before_hard_gate(monkeypatch):
