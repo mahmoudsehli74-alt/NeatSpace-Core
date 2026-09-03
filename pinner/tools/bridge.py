@@ -103,11 +103,18 @@ class BridgeTool:
         self,
         url: str,
         *,
-        attempts: int = 3,
-        wait_seconds: float = 5.0,
+        attempts: int = 12,
+        wait_seconds: float = 20.0,
         sleeper=time.sleep,
     ) -> bool:
-        """Poll the Pages URL until it answers 200 (CDN propagation)."""
+        """Poll the Pages URL until it answers 200 (CDN propagation).
+
+        Live-measured 2026-09-03: GitHub Pages builds take 3-5 min after the
+        Contents commit. The old 3x5s window lost that race every time —
+        the runner marked ENRICHED pins as 'bridge not deployed' and the
+        products had to wait a whole cron cycle to retry. 12x20s (4 min)
+        matches the real build time; the runner's 25-min job timeout
+        absorbs it comfortably."""
         for attempt in range(1, attempts + 1):
             reply = self._transport("GET", url)
             if reply.status == 200:

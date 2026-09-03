@@ -110,13 +110,14 @@ def test_verify_deployed_polls_until_200():
     fake = FakeTransport(HttpReply(404, b""), HttpReply(502, b""), HttpReply(200, b"<html>"))
     tool = BridgeTool("pat", transport=fake)
     ok = tool.verify_deployed("https://neatspace-kitchen.github.io/p/k.json", sleeper=sleeps.append)
-    assert ok is True and sleeps == [5.0, 5.0]
+    assert ok is True and sleeps == [20.0, 20.0]
     assert fake.calls[0]["url"].startswith("https://neatspace-kitchen.github.io")
 
 
 def test_verify_deployed_gives_up_after_attempts():
     sleeps: list[float] = []
-    fake = FakeTransport(*[HttpReply(404, b"")] * 3)
+    # LIVE 2026-09-03: Pages builds take 3-5 min — the window is now 12x20s
+    fake = FakeTransport(*[HttpReply(404, b"")] * 12)
     tool = BridgeTool("pat", transport=fake)
     assert tool.verify_deployed("https://x.github.io/p/k.json", sleeper=sleeps.append) is False
-    assert sleeps == [5.0, 5.0] and len(fake.calls) == 3
+    assert len(fake.calls) == 12 and set(sleeps) == {20.0}
