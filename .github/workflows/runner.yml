@@ -22,6 +22,8 @@ on:
         default: "5"
   schedule:
     - cron: "0 */4 * * *" # every 4 hours (6 runs/day, UTC)
+  push:
+    branches: [main]
 
 concurrency:
   group: pin-runner
