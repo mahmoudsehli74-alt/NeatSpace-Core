@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260903-201033-2dc7d1",
+  "run_tag": "smoke-20260903-204344-5ee072",
   "stages": {
     "account": {
       "ok": true,
@@ -9,36 +9,28 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812903620034",
-      "title": "Adhesive Wall Phone Holder Premium Acrylic Wall Mount Phone Bracket Smartphone Storage Organizer for Home Office Kitchen",
-      "rejected_candidates": {}
+      "product_id": "3256812473860035",
+      "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora"
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c4LYDAc5"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c3JTIXel"
     },
     "moderation": {
-      "ok": true,
-      "verdict": "APPROVE"
-    },
-    "image": {
-      "ok": true,
-      "width": 1000,
-      "height": 1500,
-      "source_bytes": 15872
-    },
-    "bridge": {
-      "ok": true,
-      "commit_sha": "b629b86542cb69e99c502c172c8338d844f8bedb",
-      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812903620034.json",
-      "deployed": true,
-      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034"
+      "ok": false,
+      "error": "all 5 candidates rejected before pinning",
+      "rejects": {
+        "3256812903620034": "moderation unavailable (transient agent error)",
+        "3256812184559268": "fetch: PermanentAdapterError: [aliexpress] iop error ApiCallLimit: Api access frequency exceeds the limit. this ban will last 1 se",
+        "3256812730338668": "moderation unavailable (transient agent error)",
+        "3256812473860035": "moderation unavailable (transient agent error)",
+        "3256812533119579": "fetch: PermanentAdapterError: [aliexpress] iop error ApiCallLimit: Api access frequency exceeds the limit. this ban will last 1 se"
+      }
     }
   },
-  "pin_url": "https://www.pinterest.com/pin/1089167491162180263/",
-  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034",
-  "ok": true,
-  "started": 1788466233.8820627,
-  "updated": 1788466244.7461226,
-  "finished": 1788466244.7461214
+  "pin_url": null,
+  "destination": null,
+  "ok": false,
+  "started": 1788468224.5075696,
+  "updated": 1788468297.9086688
 }
