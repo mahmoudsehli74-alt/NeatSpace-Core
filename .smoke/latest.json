@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260903-204344-5ee072",
+  "run_tag": "smoke-20260904-184832-a464db",
   "stages": {
     "account": {
       "ok": true,
@@ -9,28 +9,36 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812473860035",
-      "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora"
+      "product_id": "3256812184559268",
+      "title": "Spice Rack Kitchen Cabinet Organizer- 3 Tier Bamboo Expandable Display Shelf, Bamboo 3-Layer Adjustable Spice Rack-A79M",
+      "rejected_candidates": {}
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3JTIXel"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c3N4yrt7"
     },
     "moderation": {
-      "ok": false,
-      "error": "all 5 candidates rejected before pinning",
-      "rejects": {
-        "3256812903620034": "moderation unavailable (transient agent error)",
-        "3256812184559268": "fetch: PermanentAdapterError: [aliexpress] iop error ApiCallLimit: Api access frequency exceeds the limit. this ban will last 1 se",
-        "3256812730338668": "moderation unavailable (transient agent error)",
-        "3256812473860035": "moderation unavailable (transient agent error)",
-        "3256812533119579": "fetch: PermanentAdapterError: [aliexpress] iop error ApiCallLimit: Api access frequency exceeds the limit. this ban will last 1 se"
-      }
+      "ok": true,
+      "verdict": "APPROVE"
+    },
+    "image": {
+      "ok": true,
+      "width": 821,
+      "height": 1232,
+      "source_bytes": 23394
+    },
+    "bridge": {
+      "ok": true,
+      "commit_sha": "8f6eeea19d320f28e029f1edd0a0719af3444339",
+      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812184559268.json",
+      "deployed": true,
+      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812184559268"
     }
   },
-  "pin_url": null,
-  "destination": null,
-  "ok": false,
-  "started": 1788468224.5075696,
-  "updated": 1788468297.9086688
+  "pin_url": "https://www.pinterest.com/pin/1089167491162041622/",
+  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812184559268",
+  "ok": true,
+  "started": 1788547712.381506,
+  "updated": 1788547738.884899,
+  "finished": 1788547738.8848975
 }
