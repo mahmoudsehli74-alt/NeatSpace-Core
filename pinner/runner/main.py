@@ -151,6 +151,12 @@ class Runner:
             return "PERMANENT"
         return "TRANSIENT"
 
+    @staticmethod
+    def _is_quota_exhausted(exc: Exception) -> bool:
+        """Gemini free-tier 429 RESOURCE_EXHAUSTED — the daily quota, not a
+        transient spike. Retrying within the run just burns attempts."""
+        return "429" in str(exc) and "RESOURCE_EXHAUSTED" in str(exc)
+
     # ------------------------------------------------------------------ execute
 
     def execute(self) -> dict:
@@ -407,6 +413,27 @@ class Runner:
                         )
                 except Exception as exc:
                     error_class = self._error_class(exc)
+                    # QUOTA CIRCUIT BREAKER (audit 2026-09-04): a gemini 429
+                    # means today's free-tier RPD is exhausted — every
+                    # remaining enrich attempt this run will burn quota and
+                    # poison docs at max_attempts. Stop THIS account's loop;
+                    # fail() marks the doc RETRY with 6h backoff (quota
+                    # resets daily), and the next cron picks it up cleanly.
+                    if self._is_quota_exhausted(exc):
+                        self.pins.fail(
+                            pin_doc["_id"], error=str(exc),
+                            error_class="TRANSIENT", run_id=self.run_id, now=self.now(),
+                        )
+                        self.stats["pin_failed"] += 1
+                        self.stats["gemini_quota_breaks"] = (
+                            self.stats.get("gemini_quota_breaks", 0) + 1
+                        )
+                        self._alert(
+                            f"[{self.run_id}] gemini quota exhausted — pausing enrich "
+                            f"for {account.get('name')!r} until quota reset (docs retry "
+                            f"with 6h backoff)"
+                        )
+                        break
                     self.pins.fail(
                         pin_doc["_id"], error=str(exc), error_class=error_class,
                         run_id=self.run_id, now=self.now(),

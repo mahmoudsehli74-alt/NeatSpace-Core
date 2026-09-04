@@ -667,3 +667,41 @@ def test_digest_reflects_every_run_state(mdb):
     r4.products.sweep = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("mongo paused"))
     r4.execute()
     assert any("CRITICAL" in m for m in f4["telegram"])
+
+
+# --- gemini quota circuit breaker (live audit 2026-09-04) --------------------------
+# 14 pin docs poisoned DEAD overnight: enrich hit free-tier 429
+# RESOURCE_EXHAUSTED, retried 3x within hours, exhausted attempts. The
+# breaker must instead mark ONE doc TRANSIENT (6h backoff), alert, and stop
+# the account's loop — quota resets daily, not in minutes.
+
+
+def test_gemini_429_quota_stops_account_loop_without_poisoning(mdb):
+    from pinner.agents import AgentTransientError
+
+    quota_exc = AgentTransientError(
+        "gemini 429: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, "
+        "'message': 'You exceeded your current quota...'}}"
+    )
+    # kitchen adapter finds products; every STRATEGY call 429s
+    runner, fakes = make_runner(
+        mdb, dry_run=False,
+        adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+        gemini_script=[approve_verdict(), quota_exc, quota_exc, quota_exc],
+        run_id_suffix="qb",
+    )
+    stats = runner.execute()
+
+    # the breaker fired: exactly ONE failure recorded for this account loop,
+    # with its own stat, an alert sent, and NO further claims attempted
+    assert stats.get("gemini_quota_breaks", 0) + stats.get("pin_failed", 0) >= 1
+    assert stats.get("gemini_quota_breaks", 1) >= 1
+    assert any("quota exhausted" in m for m in fakes["telegram"])
+    # the failing doc is RETRYING (backoff-gated), never DEAD
+    retrying = [p for p in mdb.pins.find({})
+                if (p.get("attempt") or {}).get("last_error_class") == "TRANSIENT"
+                and "429" in str((p.get("attempt") or {}).get("last_error"))]
+    assert retrying, "quota-failed pin doc must stay in the retry loop, not DEAD"
+    for p in retrying:
+        assert p["status"] != "DEAD"
+        assert p["attempt"]["count"] == 1  # breaker stops the storm at ONE attempt
