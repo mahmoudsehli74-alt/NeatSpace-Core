@@ -705,3 +705,64 @@ def test_gemini_429_quota_stops_account_loop_without_poisoning(mdb):
     for p in retrying:
         assert p["status"] != "DEAD"
         assert p["attempt"]["count"] == 1  # breaker stops the storm at ONE attempt
+
+
+# --- sandbox board fallback (live audit Sep 4-5) -----------------------------------
+# Pinterest sandbox-mode apps flip INDIVIDUAL boards into sandbox state
+# ("Cannot add non-sandbox pins on sandbox boards", code 15) and the flip
+# moves between boards over time. Live-probed Sep 5: same minute, Modern
+# Wall Art accepted 201 while Home Decor rejected 400. The pin stage must
+# FALL BACK to a different board, never poison.
+
+
+def test_sandbox_board_400_falls_back_to_next_board(mdb):
+    """First create-pin 400s with the live sandbox body (code 15); the stage
+    must fall back to a different board and succeed — never poison."""
+    state = {"creates": 0}
+
+    class SandboxFirstRouter(BearerRouter):
+        def __call__(self, method, url, **kw):
+            if method == "POST" and url.endswith("/v5/pins"):
+                state["creates"] += 1
+                if state["creates"] == 1:
+                    return reply({"code": 15,
+                                  "message": "Cannot add non-sandbox pins on sandbox boards."},
+                                 status=400)
+                return reply({"id": "pin-fallback-ok"}, status=201)
+            return super().__call__(method, url, **kw)
+
+    # the account needs a SECOND board so a fallback target exists
+
+    router = SandboxFirstRouter()
+    runner, fakes = make_runner(
+        mdb, dry_run=False,
+        adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+        gemini_script=[approve_verdict(), good_strategy()],
+        pinterest_router=router,
+        run_id_suffix="sbx",
+    )
+    # seed a second board onto the kitchen account so fallback has a target.
+    # boards_fetched_at=now keeps _boards_map on the cache (a fresh fetch
+    # would hit the router's one-board listing and erase the target).
+    from datetime import timedelta as _td
+    _fresh = T0 - _td(hours=1)  # fresh relative to the runner's T0 clock
+    acct = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
+    mdb.accounts.update_one({"_id": acct["_id"]},
+        {"$set": {"boards_cache": [
+            {"id": "b-kitchen", "name": NICHES["kitchen"]["board"]},
+            {"id": "b-kitchen-2", "name": "Fallback Board"},
+        ], "boards_fetched_at": _fresh}})
+    stats = runner.execute()
+
+    if state["creates"] >= 2:  # sandbox 400 happened -> fallback path exercised
+        events = list(mdb.audit_log.find({"event": "BOARD_SANDBOX_FALLBACK"}))
+        assert events, "BOARD_SANDBOX_FALLBACK audit event must be logged"
+        docs = list(mdb.pins.find({"status": {"$in": ["PINNED", "VERIFIED"]}}))
+        assert docs, "pin must land on the fallback board"
+        content = docs[0].get("content") or {}
+        assert content.get("board_choice") == "Fallback Board"
+        assert "sandbox" not in str((docs[0].get("attempt") or {}).get("last_error"))
+    else:
+        # strategist never picked the sandbox board (single-board account):
+        # first create succeeded directly; run must still complete cleanly
+        assert stats.get("pinned", 0) >= 1

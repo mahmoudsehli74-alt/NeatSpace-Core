@@ -588,14 +588,59 @@ class Runner:
             if not image_url:
                 raise ToolPermanentError("product has no image to pin")
             image_bytes = self.deps.image_fetcher(image_url)
-            created = tool.create_pin(
-                board_id=board_id,
-                title=content["title"][:95],
-                description=content["description"][:480],
-                link=bridge_url,
-                image_bytes=image_bytes,
-                alt_text=content["title"][:95],
-            )
+            try:
+                created = tool.create_pin(
+                    board_id=board_id,
+                    title=content["title"][:95],
+                    description=content["description"][:480],
+                    link=bridge_url,
+                    image_bytes=image_bytes,
+                    alt_text=content["title"][:95],
+                )
+            except ToolPermanentError as exc:
+                # SANDBOX BOARD FALLBACK (live audit Sep 4-5): Pinterest
+                # sandbox-mode apps flip individual boards into "sandbox"
+                # state — create_pin 400s with "Cannot add non-sandbox pins
+                # sandbox boards" and the flip moves BETWEEN boards over
+                # time. Live-probed: same minute, one board accepts, another
+                # rejects. So: fall back to a DIFFERENT board (uncovered
+                # first, the failed one excluded) instead of poisoning.
+                if "sandbox" not in str(exc):
+                    raise
+                from pinner.repo import audit as audit_mod
+
+                covered = self._covered_boards(str(account["_id"]))
+                fallbacks = [
+                    n for n in self._ordered_boards(account)
+                    if n != choice and n not in covered
+                ] or [
+                    n for n in self._ordered_boards(account) if n != choice
+                ]
+                if not fallbacks:
+                    # every other board already carries a pin — retry later;
+                    # board sandbox state flips over time.
+                    raise ToolTransientError(
+                        f"board {choice!r} in sandbox state and no fallback "
+                        f"board free; retry after next re pin"
+                    ) from exc
+                retry_choice = fallbacks[0]
+                retry_board_id = boards.get(retry_choice)
+                if not retry_board_id:
+                    raise ToolPermanentError(f"fallback board vanished: {retry_choice!r}")
+                audit_mod.log(
+                    self.db, run_id=self.run_id, entity="pins",
+                    entity_id=pin_doc["_id"], event="BOARD_SANDBOX_FALLBACK",
+                    detail={"from": choice, "to": retry_choice},
+                )
+                created = tool.create_pin(
+                    board_id=retry_board_id,
+                    title=content["title"][:95],
+                    description=content["description"][:480],
+                    link=bridge_url,
+                    image_bytes=image_bytes,
+                    alt_text=content["title"][:95],
+                )
+                choice, board_id = retry_choice, retry_board_id
             pin_id = created["pin_id"]
         self.pins.transition(
             pin_doc["_id"], "PIN_OK",
