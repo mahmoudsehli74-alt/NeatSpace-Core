@@ -526,11 +526,12 @@ class Runner:
         )
         self.stats["bridged"] += 1
 
-    def _boards_map(self, account: dict) -> dict[str, str]:
+    def _boards_map(self, account: dict, *, force_refresh: bool = False) -> dict[str, str]:
         boards = account.get("boards_cache") or []
         fetched = account.get("boards_fetched_at")
         stale = (
-            not boards
+            force_refresh
+            or not boards
             or fetched is None
             or (self.now() - fetched).days > BOARDS_MAX_AGE_DAYS
         )
@@ -577,9 +578,35 @@ class Runner:
             board_id = boards.get(choice)
             if not board_id:
                 raise ToolPermanentError(f"reallocation board vanished: {choice!r}")
-
         tool = self._pinterest(account)
-        existing = tool.find_pin_by_link(board_id, bridge_url)  # reconcile first
+        # DELETED-BOARD GUARD (live audit 2026-09-06): the operator deleted
+        # the 'Home Decor' board; the stale cache still listed it, the
+        # allocator steered pins onto it, and every reconcile 404 poisoned
+        # a doc at attempt 1 (PERMANENT classification). A 404 naming the
+        # chosen board means the board is gone: force-refresh the cache
+        # and fall back to a live uncovered board, audited. Happy path
+        # costs no extra Pinterest calls.
+        try:
+            existing = tool.find_pin_by_link(board_id, bridge_url)  # reconcile first
+        except ToolPermanentError as exc:
+            if "HTTP 404" not in str(exc):
+                raise
+            from pinner.repo import audit as audit_mod
+
+            live_boards = self._boards_map(account, force_refresh=True)
+            fallbacks = [n for n in self._ordered_boards(account)
+                         if n in live_boards and n != choice]
+            if not fallbacks:
+                raise ToolTransientError(
+                    f"board {choice!r} deleted and no live board free; retry later"
+                ) from exc
+            audit_mod.log(
+                self.db, run_id=self.run_id, entity="pins", entity_id=pin_doc["_id"],
+                event="BOARD_DELETION_FALLBACK",
+                detail={"from": choice, "to": fallbacks[0]},
+            )
+            choice, board_id = fallbacks[0], live_boards[fallbacks[0]]
+            existing = None  # fresh board cannot carry this link
         if existing:
             pin_id = existing["id"]
         else:

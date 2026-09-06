@@ -766,3 +766,64 @@ def test_sandbox_board_400_falls_back_to_next_board(mdb):
         # strategist never picked the sandbox board (single-board account):
         # first create succeeded directly; run must still complete cleanly
         assert stats.get("pinned", 0) >= 1
+
+
+# --- deleted-board fallback (live audit 2026-09-06) ---------------------------------
+# The operator deleted the 'Home Decor' board; the stale boards_cache (under
+# the 7-day staleness age) still listed it, the allocator steered pins onto
+# it, and find_pin_by_link's reconcile 404 poisoned docs PERMANENT at
+# attempt 1. The guard: on a reconcile 404, force-refresh boards, fall back
+# to a live board (BOARD_DELETION_FALLBACK audited), never poison.
+
+
+def test_deleted_board_reconcile_404_falls_back_to_live_board(mdb):
+    state = {"phase": 0}
+    # two-board cache, only one board actually LIVE in the API listing
+    acct = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
+    from datetime import timedelta as _td
+    mdb.accounts.update_one({"_id": acct["_id"]}, {"$set": {
+        "boards_cache": [
+            {"id": "b-gone", "name": NICHES["kitchen"]["board"]},
+            {"id": "b-live", "name": "Live Board"},
+        ],
+        "boards_fetched_at": T0 - _td(hours=1),
+    }})
+
+    class DeletedBoardRouter(BearerRouter):
+        """First call: boards listing WITHOUT the gone board (the forced
+        refresh). Then: find_by_link on b-gone 404s (deleted board)."""
+        def __call__(self, method, url, **kw):
+            if method == "GET" and url.endswith("/boards?page_size=100"):
+                state["phase"] += 1
+                if state["phase"] >= 1:
+                    # refreshed listing: gone board is absent
+                    return reply({"items": [{"id": "b-live", "name": "Live Board"}]})
+            if method == "GET" and "/boards/b-gone/pins" in url:
+                return reply({"code": 760, "message": "Board not found."},
+                             status=404)
+            # pin routing on the LIVE board succeeds
+            if method == "GET" and "/boards/b-live/pins" in url:
+                return reply({"items": []})
+            if method == "GET" and "/pins/" in url:
+                return reply({"id": url.rsplit("/", 1)[-1], "board_id": "b-live"})
+            if method == "POST" and url.endswith("/v5/pins"):
+                return reply({"id": "pin-del-fb-ok"}, status=201)
+            return super().__call__(method, url, **kw)
+
+    runner, fakes = make_runner(
+        mdb, dry_run=False,
+        adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+        gemini_script=[approve_verdict(), good_strategy()],
+        pinterest_router=DeletedBoardRouter(),
+        run_id_suffix="delb",
+    )
+    stats = runner.execute()
+
+    events = list(mdb.audit_log.find({"event": "BOARD_DELETION_FALLBACK"}))
+    assert events, "BOARD_DELETION_FALLBACK must be audited on reconcile 404"
+    assert events[0]["detail"]["from"] == NICHES["kitchen"]["board"]
+    assert events[0]["detail"]["to"] == "Live Board"
+    docs = list(mdb.pins.find({"status": {"$in": ["PINNED", "VERIFIED"]}}))
+    assert docs, "pin must land on the live fallback board"
+    assert (docs[0].get("content") or {}).get("board_choice") == "Live Board"
+    assert stats.get("pinned", 0) >= 1
