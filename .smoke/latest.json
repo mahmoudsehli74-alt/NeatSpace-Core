@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260906-214827-48582b",
+  "run_tag": "smoke-20260907-192615-8a9729",
   "stages": {
     "account": {
       "ok": true,
@@ -9,13 +9,13 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812746616353",
-      "title": "360\u00b0 Rotation 3\u2011In\u20111 Suction Cup Magnetic Phone Holder Multi\u2011Angle Adjustable Foldable Magnet Phone Stand Desktop Bracke",
+      "product_id": "3256812903620034",
+      "title": "Adhesive Wall Phone Holder Premium Acrylic Wall Mount Phone Bracket Smartphone Storage Organizer for Home Office Kitchen",
       "rejected_candidates": {}
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3pqWZmz"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c4qfTBBP"
     },
     "moderation": {
       "ok": true,
@@ -25,20 +25,20 @@
       "ok": true,
       "width": 1000,
       "height": 1500,
-      "source_bytes": 117378
+      "source_bytes": 15872
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "2ba47d29ed689cb436eab2487800d1244aa00e46",
-      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812746616353.json",
+      "commit_sha": "74e7074308b6b7b7d6b2e7935f54f242eeabcf0d",
+      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812903620034.json",
       "deployed": true,
-      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812746616353"
+      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034"
     }
   },
-  "pin_url": "https://www.pinterest.com/pin/1089167491162454054/",
-  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812746616353",
+  "pin_url": "https://www.pinterest.com/pin/1089167491162180263/",
+  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034",
   "ok": true,
-  "started": 1788731307.4378028,
-  "updated": 1788731341.3873208,
-  "finished": 1788731341.3873196
+  "started": 1788809175.5222037,
+  "updated": 1788809188.196977,
+  "finished": 1788809188.1969757
 }
