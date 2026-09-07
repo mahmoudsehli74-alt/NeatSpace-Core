@@ -379,3 +379,20 @@ def test_strategist_applies_repair_before_hard_gate(monkeypatch):
     content = strategist.create(CLEAN_RAW, KITCHEN_NICHE, BOARDS)
     assert content.board_choice in BOARDS
     assert all(t.startswith("#") and " " not in t for t in content.hashtags)
+
+
+def test_gemini_client_requires_model_kwarg():
+    """THE inaugural-analyst regression (2026-09-07): scripts/analyze.py
+    constructed GeminiJsonClient(api_key) without model= and the whole
+    weekly learning loop died in TypeError at 13:00 UTC. The client must
+    FAIL FAST on construction without model — silent defaults here would
+    recreate the bug class."""
+    import pytest
+
+    from pinner.agents.client import GeminiJsonClient
+
+    with pytest.raises(TypeError):
+        GeminiJsonClient("some-key")  # model is required, no default
+    # and the correct form compiles
+    c = GeminiJsonClient("some-key", model="any-model")
+    assert c.model == "any-model"

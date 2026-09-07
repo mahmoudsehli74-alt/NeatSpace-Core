@@ -45,10 +45,17 @@ def main() -> int:
         )
         return 0
 
+    import os
+
+    from pinner.agents import DEFAULT_MODEL
     from pinner.agents.analyst import Analyst
     from pinner.agents.client import GeminiJsonClient
 
-    client = GeminiJsonClient(settings.gemini_api_key)
+    # model is a required kwarg on GeminiJsonClient (the runner's agent-model
+    # architecture) — the inaugural 2026-09-07 13:00 UTC analyst run died on
+    # exactly this: TypeError missing 'model'. Same env override as the runner.
+    client = GeminiJsonClient(settings.gemini_api_key,
+                              model=os.environ.get("AGENT_MODEL") or DEFAULT_MODEL)
     proposal = Analyst(client).review(data)
 
     lines = ["📊 Weekly Performance Proposal", "", proposal.summary, ""]
