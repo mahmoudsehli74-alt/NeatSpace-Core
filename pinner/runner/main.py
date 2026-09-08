@@ -157,6 +157,13 @@ class Runner:
         transient spike. Retrying within the run just burns attempts."""
         return "429" in str(exc) and "RESOURCE_EXHAUSTED" in str(exc)
 
+    @staticmethod
+    def _is_gemini_overloaded(exc: Exception) -> bool:
+        """Gemini 503 UNAVAILABLE 'high demand' — a platform overload
+        window; every enrich attempt in it fails. Same clamp as the quota
+        breaker, shorter horizon (spikes pass between runs)."""
+        return "503" in str(exc) and "UNAVAILABLE" in str(exc)
+
     # ------------------------------------------------------------------ execute
 
     def execute(self) -> dict:
@@ -432,6 +439,28 @@ class Runner:
                             f"[{self.run_id}] gemini quota exhausted — pausing enrich "
                             f"for {account.get('name')!r} until quota reset (docs retry "
                             f"with 6h backoff)"
+                        )
+                        break
+                    # OVERLOAD BREAKER (audit 2026-09-08): gemini 503 "high
+                    # demand" spikes behave the same way at run scale — every
+                    # enrich attempt in the window fails and exhausts
+                    # max_attempts within a day (2 docs DEAD this morning on
+                    # exactly this). Clamp identically: one failure per
+                    # account-run, docs retry next run when the spike has
+                    # passed.
+                    if self._is_gemini_overloaded(exc):
+                        self.pins.fail(
+                            pin_doc["_id"], error=str(exc),
+                            error_class="TRANSIENT", run_id=self.run_id, now=self.now(),
+                        )
+                        self.stats["pin_failed"] += 1
+                        self.stats["gemini_overload_breaks"] = (
+                            self.stats.get("gemini_overload_breaks", 0) + 1
+                        )
+                        self._alert(
+                            f"[{self.run_id}] gemini overloaded (503) — pausing "
+                            f"enrich for {account.get('name')!r} this run; docs "
+                            f"retry next cycle"
                         )
                         break
                     self.pins.fail(

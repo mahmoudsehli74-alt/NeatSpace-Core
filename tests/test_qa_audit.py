@@ -827,3 +827,35 @@ def test_deleted_board_reconcile_404_falls_back_to_live_board(mdb):
     assert docs, "pin must land on the live fallback board"
     assert (docs[0].get("content") or {}).get("board_choice") == "Live Board"
     assert stats.get("pinned", 0) >= 1
+
+
+def test_gemini_503_overload_clamps_account_loop(mdb):
+    """OVERLOAD BREAKER (2026-09-08): two docs exhausted max_attempts on
+    gemini 503 'high demand' spikes within one day. The breaker must mark
+    ONE doc TRANSIENT, alert, and stop the account loop — same clamp as the
+    429 quota breaker."""
+    from pinner.agents import AgentTransientError
+
+    overload = AgentTransientError(
+        "gemini 503: 503 UNAVAILABLE. {'error': {'code': 503, "
+        "'message': 'This model is currently experiencing high demand. "
+        "Spikes in demand are usually temporary...'}}"
+    )
+    runner, fakes = make_runner(
+        mdb, dry_run=False,
+        adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+        gemini_script=[approve_verdict(), overload, overload, overload],
+        run_id_suffix="ovl",
+    )
+    stats = runner.execute()
+
+    assert stats.get("gemini_overload_breaks", 0) >= 1
+    assert any("overloaded" in m for m in fakes["telegram"])
+    # no doc poisoned; the one that hit the 503 is retrying, count == 1
+    dead = list(mdb.pins.find({"status": "DEAD"}))
+    assert not dead, "503 overload must never poison at run time"
+    hit = [p for p in mdb.pins.find({})
+           if "503" in str((p.get("attempt") or {}).get("last_error") or "")]
+    for p in hit:
+        assert p["status"] != "DEAD"
+        assert (p.get("attempt") or {}).get("count") == 1
