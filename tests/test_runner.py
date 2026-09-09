@@ -221,7 +221,8 @@ def test_full_run_end_to_end_verified(mdb):
     pin = mdb.pins.find_one()
     assert pin["status"] == "VERIFIED"
     assert pin["pin"]["pin_id"] == "pin-77"
-    assert pin["bridge"]["url"].endswith("/?id=stub-store-kitchen-organization-1")
+    # keyword rotation at T0: kitchen searches board_keywords[3] ("storage ideas")
+    assert pin["bridge"]["url"].endswith("/?id=stub-store-storage-ideas-1")
     assert pin["bridge"]["commit_sha"] == "sha-x"
 
     account = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
@@ -234,7 +235,7 @@ def test_full_run_end_to_end_verified(mdb):
     assert any("verified=1" in m for m in fakes["telegram"])
     # bridge verified the deployed JSON before BRIDGE_OK
     verify_urls = [c["url"] for c in fakes["bridge_transport"].calls if c["method"] == "GET"]
-    assert any("/products/stub-store-kitchen-organization-1.json" in u for u in verify_urls)
+    assert any("/products/stub-store-storage-ideas-1.json" in u for u in verify_urls)
 
 
 def test_dry_run_never_touches_pinterest(mdb):
@@ -251,7 +252,10 @@ def test_dry_run_never_touches_pinterest(mdb):
 
 
 def test_reconcile_adopts_existing_pin(mdb):
-    bridge_url_suffix = "?id=stub-store-kitchen-organization-1"
+    # keyword rotation: at T0 the runner searches board_keywords[3] for
+    # kitchen ("storage ideas") — the FakeAdapter derives product ids from
+    # the query, so the reconciled bridge url follows the rotated keyword.
+    bridge_url_suffix = "?id=stub-store-storage-ideas-1"
     pinterest = [
         reply({"items": [{"id": "b-1", "name": "Kitchen Organization"}]}),
         reply({"items": [{"id": "pin-existing", "link": f"https://neatspace-kitchen.github.io/{bridge_url_suffix}"}]}),

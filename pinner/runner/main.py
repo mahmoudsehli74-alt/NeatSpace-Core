@@ -206,7 +206,14 @@ class Runner:
             if niche is None or niche["_id"] in seen_niches:
                 continue
             seen_niches.add(niche["_id"])
-            keywords = (niche.get("board_keywords") or ["home"])[0]
+            # KEYWORD ROTATION (live audit 2026-09-09): always searching
+            # board_keywords[0] exhausts shallow keyword wells — the selfcare
+            # niche's first keyword surfaces only 2 candidates (both already
+            # cataloged), starving the queue while kitchen/aesthetics get 8
+            # fresh candidates each. Rotate deterministically across the
+            # niche's keywords: one keyword per run, round-robin by date.
+            kws = niche.get("board_keywords") or ["home"]
+            keywords = kws[self.now().toordinal() % len(kws)]
             try:
                 candidates = self.deps.adapter.search_products(keywords, max_results=8)
             except Exception as exc:

@@ -859,3 +859,33 @@ def test_gemini_503_overload_clamps_account_loop(mdb):
     for p in hit:
         assert p["status"] != "DEAD"
         assert (p.get("attempt") or {}).get("count") == 1
+
+
+def test_discovery_keyword_rotation_round_robins(mdb):
+    """KEYWORD ROTATION (live audit 2026-09-09): the selfcare niche's first
+    board keyword surfaces only 2 stale candidates while kitchen gets 8 —
+    discovery must rotate across board_keywords by date, not always take
+    index [0]."""
+    seen_keywords: list[str] = []
+
+    class RotatedAdapter(MultiNicheAdapter):
+        def search_products(self, niche_query, *, max_results=10):
+            seen_keywords.append(niche_query)
+            return super().search_products(niche_query, max_results=max_results)
+
+    # kitchen niche has 4 board_keywords; run on two consecutive days
+    r1, _ = make_runner(mdb, dry_run=False, adapter=RotatedAdapter(),
+                        gemini_script=[], run_id_suffix="rot1")
+    r1.execute()
+    from datetime import timedelta as _td
+    r2, _ = make_runner(mdb, dry_run=False, adapter=RotatedAdapter(),
+                        gemini_script=[], run_id_suffix="rot2",
+                        now=T0 + _td(days=1))
+    r2.execute()
+    # the kitchen searches must have used DIFFERENT keywords across days
+    kitchen_kws = [k for k in seen_keywords if "kitchen" in k]
+    assert kitchen_kws, f"no kitchen keyword searched: {seen_keywords}"
+    if len(kitchen_kws) >= 2:
+        assert kitchen_kws[0] != kitchen_kws[1], (
+            f"keyword did not rotate across days: {kitchen_kws}"
+        )
