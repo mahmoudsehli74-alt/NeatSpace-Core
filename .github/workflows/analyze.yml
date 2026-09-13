@@ -45,6 +45,7 @@ jobs:
           # every scheduled run since go-live (audit 2026-09-01).
           TOKEN_MASTER_KEY: ${{ secrets.TOKEN_MASTER_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scripts/analyze.py

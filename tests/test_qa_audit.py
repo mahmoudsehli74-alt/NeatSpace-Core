@@ -255,17 +255,18 @@ class _QATokenStore:
 
 def make_runner(mdb, *, dry_run=False, adapter=None, gemini_script=None,
                 pinterest_router=None, bridge_replies=None, now=T0,
-                pins_per_account=2, run_id_suffix="", daily_cap_override=None):
+                pins_per_account=2, run_id_suffix="", daily_cap_override=None,
+                gemini_client=None):
     scripted = ScriptedGeminiRunner(*(gemini_script if gemini_script is not None else [
         approve_verdict(), good_strategy()]))
     bridge_transport = FakeTransport(*(bridge_replies or default_bridge_replies(2)))
     telegram_messages: list[str] = []
 
+    shared_client = gemini_client or GeminiJsonClient("k", model="test", raw=scripted)
     deps = RunnerDeps(
         adapter=adapter or MultiNicheAdapter(),
-        moderator=Moderator(GeminiJsonClient("k", model="test", raw=scripted),
-                            image_fetcher=lambda u: None),
-        strategist=Strategist(GeminiJsonClient("k", model="test", raw=scripted)),
+        moderator=Moderator(shared_client, image_fetcher=lambda u: None),
+        strategist=Strategist(shared_client),
         bridge=BridgeTool("pat", transport=bridge_transport),
         token_store=_QATokenStore(mdb),
         pinterest_factory=lambda tok: PinterestTool(tok, transport=pinterest_router),
@@ -926,3 +927,59 @@ def test_quota_failures_across_runs_never_poison(mdb):
         assert status != "DEAD", "quota failure must never poison"
         assert next_at is not None, "retry must stay scheduled"
     assert statuses[-1][1] == 3  # attempts accumulate, budget never exhausts
+
+
+# --- gemini key failover (capacity upgrade, 2026-09-13) -----------------------------
+# GEMINI_API_KEY_2 doubles enrichment capacity: the primary key 429s, the
+# SAME prompt retries on the fallback key inside the client, and the run
+ # continues without tripping the quota breaker or poisoning anything.
+
+
+def test_primary_key_429_falls_over_to_second_key(mdb):
+    """Operator scenario: the primary key is quota-exhausted (every call
+    429s), the client rotates to key-fallback transparently, and the run
+    completes a full pin cycle — zero breaker trips, zero DEAD."""
+    from pinner.agents.client import GeminiJsonClient
+
+    class KeyAwareRaw:
+        """429s whenever the ACTIVE key is the exhausted primary; delegates
+        to the scripted behaviors for any other key."""
+
+        def __init__(self, get_key, scripted):
+            self.get_key = get_key
+            self.scripted = scripted
+
+        @property
+        def models(self):
+            return self
+
+        def generate_content(self, *, model, contents, config):
+            if self.get_key() == "key-primary":
+                err = TypeError("429 RESOURCE_EXHAUSTED. quota exceeded.")
+                err.code = 429
+                raise err
+            return self.scripted.models.generate_content(
+                model=model, contents=contents, config=config)
+
+    scripted = ScriptedGeminiRunner(approve_verdict(), good_strategy())
+    client = GeminiJsonClient(
+        "key-primary", model="test", fallback_api_key="key-fallback",
+    )
+    client._raw = KeyAwareRaw(lambda: client.active_key, scripted)
+
+    runner, fakes = make_runner(
+        mdb, dry_run=False,
+        adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+        gemini_client=client,
+        pinterest_router=BearerRouter(),
+        run_id_suffix="failover",
+    )
+    stats = runner.execute()
+
+    # full pin cycle completed on the fallback key
+    assert stats.get("verified", 0) == 1 and stats.get("pinned", 0) == 1
+    # the quota breaker NEVER tripped — rotation absorbed it inside the client
+    assert stats.get("gemini_quota_breaks", 0) == 0
+    assert not list(mdb.pins.find({"status": "DEAD"}))
+    doc = mdb.pins.find_one({"status": "VERIFIED"})
+    assert doc["pin"]["pin_id"].startswith("pin-")

@@ -51,17 +51,62 @@ class RawClient(Protocol):
 
 
 class GeminiJsonClient:
-    def __init__(self, api_key: str, *, model: str, raw: RawClient | None = None) -> None:
-        self._api_key = api_key
+    """Gemini JSON client with automatic API-key failover.
+
+    Keys are tried in order (primary, then optional fallback(s)); when a call
+    fails with a quota error (HTTP 429 / RESOURCE_EXHAUSTED) the client
+    rotates to the next key and retries the SAME prompt, transparently. A
+    non-quota failure (5xx, auth, schema) raises immediately — no rotation.
+    When every key is quota-exhausted the last quota error bubbles up so the
+    runner's day-scoped QUOTA_ATTEMPT_BUDGET (6h backoff) takes over.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str,
+        raw: RawClient | None = None,
+        fallback_api_key: str = "",
+    ) -> None:
+        self._keys: list[str] = [k for k in (api_key, fallback_api_key) if k]
+        if not self._keys:
+            raise ValueError("GeminiJsonClient requires at least one API key")
+        self._key_index = 0
         self.model = model
         self._raw = raw
+        self._raws: dict[str, RawClient] = {}
+
+    @property
+    def active_key(self) -> str:
+        return self._keys[self._key_index]
+
+    def _rotate(self) -> bool:
+        """Advance to the next key. Returns False when every key was tried."""
+        if self._key_index >= len(self._keys) - 1:
+            return False
+        self._key_index += 1
+        return True
 
     def _client(self) -> RawClient:
-        if self._raw is None:
+        if self._raw is not None:
+            return self._raw
+        key = self.active_key
+        if key not in self._raws:
             from google import genai
 
-            self._raw = genai.Client(api_key=self._api_key)
-        return self._raw
+            self._raws[key] = genai.Client(api_key=key)
+        return self._raws[key]
+
+    @staticmethod
+    def _is_quota(exc: Exception) -> bool:
+        """Quota-class failure: HTTP 429 / RESOURCE_EXHAUSTED (daily RPD or
+        per-minute RPM). Only these justify burning the fallback key."""
+        code = getattr(exc, "code", None)
+        if code == 429:
+            return True
+        text = str(exc)
+        return "429" in text and "RESOURCE_EXHAUSTED" in text
 
     def generate(
         self,
@@ -82,21 +127,36 @@ class GeminiJsonClient:
             response_schema=schema,
             temperature=0.2,
         )
-        try:
-            response = self._client().models.generate_content(
-                model=self.model, contents=parts, config=config
-            )
-        except Exception as exc:  # classified below
-            raise self._classify(exc) from exc
-
-        parsed = getattr(response, "parsed", None)
-        if isinstance(parsed, schema):
-            return parsed
-        text = getattr(response, "text", None) or ""
-        try:
-            return schema.model_validate_json(text)
-        except ValidationError as exc:
-            raise AgentSchemaError(f"model output failed {schema.__name__} validation") from exc
+        last_quota: Exception | None = None
+        for _ in range(len(self._keys)):
+            try:
+                response = self._client().models.generate_content(
+                    model=self.model, contents=parts, config=config
+                )
+            except Exception as exc:
+                classified = self._classify(exc)
+                if self._is_quota(exc):
+                    if self._rotate():
+                        last_quota = classified
+                        continue  # same prompt, next key
+                    # every key exhausted: restart from the primary next
+                    # call (keys reset daily) and let the quota error
+                    # bubble to the day-scoped attempt budget.
+                    self._key_index = 0
+                raise classified from exc
+            parsed = getattr(response, "parsed", None)
+            if isinstance(parsed, schema):
+                return parsed
+            text = getattr(response, "text", None) or ""
+            try:
+                return schema.model_validate_json(text)
+            except ValidationError as exc:
+                raise AgentSchemaError(f"model output failed {schema.__name__} validation") from exc
+        # every key quota-exhausted — the quota error bubbles so the
+        # caller's day-scoped attempt budget (never-poison 6h schedule)
+        # takes over.
+        assert last_quota is not None
+        raise last_quota
 
     @staticmethod
     def _classify(exc: Exception) -> Exception:

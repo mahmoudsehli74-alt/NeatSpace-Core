@@ -40,6 +40,9 @@ class Settings:
 
     # Populated from Phase 2 onward — kept here so the contract is frozen once.
     gemini_api_key: str = field(default="", repr=False)
+    # Optional second Gemini key: the LLM client fails over to it on 429
+    # quota exhaustion, doubling daily enrichment capacity. Never required.
+    gemini_api_key_2: str = field(default="", repr=False)
     aliexpress_app_key: str = field(default="", repr=False)
     aliexpress_app_secret: str = field(default="", repr=False)
     aliexpress_tracking_id: str = field(default="", repr=False)
@@ -150,6 +153,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         mongo_db=os.environ["MONGO_DB"],
         token_master_key=os.environ["TOKEN_MASTER_KEY"],
         gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
+        gemini_api_key_2=os.environ.get("GEMINI_API_KEY_2", ""),
         aliexpress_app_key=os.environ.get("ALIEXPRESS_APP_KEY", ""),
         aliexpress_app_secret=os.environ.get("ALIEXPRESS_APP_SECRET", ""),
         aliexpress_tracking_id=os.environ.get("ALIEXPRESS_TRACKING_ID", ""),

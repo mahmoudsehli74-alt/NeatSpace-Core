@@ -90,7 +90,8 @@ def main() -> int:
     # model is a required kwarg on GeminiJsonClient — the inaugural analyst
     # run died on exactly this missing kwarg. Same override as the runner.
     client = GeminiJsonClient(settings.gemini_api_key,
-                              model=os.environ.get("AGENT_MODEL") or DEFAULT_MODEL)
+                              model=os.environ.get("AGENT_MODEL") or DEFAULT_MODEL,
+                              fallback_api_key=settings.gemini_api_key_2)
     proposal = Analyst(client).review(data)
 
     # AUTOPILOT: apply immediately, then report what WAS done.

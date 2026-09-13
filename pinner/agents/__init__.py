@@ -20,9 +20,14 @@ DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 def build_agents(
-    api_key: str, *, model: str = DEFAULT_MODEL, raw=None
+    api_key: str,
+    *,
+    model: str = DEFAULT_MODEL,
+    raw=None,
+    fallback_api_key: str = "",
 ) -> tuple[Moderator, Strategist]:
-    client = GeminiJsonClient(api_key, model=model, raw=raw)
+    client = GeminiJsonClient(api_key, model=model, raw=raw,
+                              fallback_api_key=fallback_api_key)
     return Moderator(client), Strategist(client)
 
 

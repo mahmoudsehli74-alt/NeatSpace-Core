@@ -849,7 +849,11 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     model = os.environ.get("AGENT_MODEL") or DEFAULT_MODEL
-    moderator, strategist = build_agents(settings.gemini_api_key, model=model)
+    moderator, strategist = build_agents(
+        settings.gemini_api_key,
+        model=model,
+        fallback_api_key=settings.gemini_api_key_2,
+    )
     deps = RunnerDeps(
         adapter=get_adapter(
             "aliexpress",

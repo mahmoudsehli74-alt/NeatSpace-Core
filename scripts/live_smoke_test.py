@@ -178,7 +178,8 @@ def main() -> int:
     if settings.gemini_api_key:
         from pinner.agents import build_agents
 
-        moderator, _ = build_agents(settings.gemini_api_key)
+        moderator, _ = build_agents(settings.gemini_api_key,
+                                    fallback_api_key=settings.gemini_api_key_2)
 
     banner("2-3. CANDIDATE PIPE: details -> affiliate link -> moderation (live)")
     cand = raw = affiliate_url = None
