@@ -123,8 +123,14 @@ def repair_strategy(content: StrategyContent, niche: dict, boards: list[str]) ->
     lo, hi = (niche.get("content_style") or {}).get("hashtag_count_range", [3, 6])
     lo = max(lo, 2)  # schema floor: StrategyContent enforces min_length=2
     repaired: list[str] = []
+    reserved = {"#board_choice", "#landing_angle", "#disclosure",
+                "#title", "#description"}
     for tag in data.get("hashtags") or []:
         fixed = tag if HASHTAG_RE.match(tag) else _slugify_tag(tag)
+        # schema field names echoed back as tags ('#board_choice') are well
+        # formed but semantic junk — drop them
+        if fixed and fixed.lower() in reserved:
+            continue
         # 'a me b' style junk ('#tag junk junk') can merge real words into
         # gibberish; only accept repairs that keep a single token
         if fixed and fixed not in repaired:
