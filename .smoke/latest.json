@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260909-195914-fc87b6",
+  "run_tag": "smoke-20260913-002206-b359f1",
   "stages": {
     "account": {
       "ok": true,
@@ -9,13 +9,15 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812903620034",
-      "title": "Adhesive Wall Phone Holder Premium Acrylic Wall Mount Phone Bracket Smartphone Storage Organizer for Home Office Kitchen",
-      "rejected_candidates": {}
+      "product_id": "3256812473860035",
+      "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora",
+      "rejected_candidates": {
+        "3256812730338668": "REJECT: [\"Unauthorized use of registered trademark 'Command' (3M brand) in product title for generic adhesiv"
+      }
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3VFQey1"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c4suKBRr"
     },
     "moderation": {
       "ok": true,
@@ -23,22 +25,22 @@
     },
     "image": {
       "ok": true,
-      "width": 1000,
-      "height": 1500,
-      "source_bytes": 15872
+      "width": 800,
+      "height": 1200,
+      "source_bytes": 70456
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "a2bb30dbb8e2fc7f546adbbb7c9f88b007268532",
-      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812903620034.json",
+      "commit_sha": "6c7d6cf5a4c37d0d2015261cfa5fa38d80068da1",
+      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812473860035.json",
       "deployed": true,
-      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034"
+      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035"
     }
   },
-  "pin_url": "https://www.pinterest.com/pin/1089167491162180263/",
-  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812903620034",
+  "pin_url": "https://www.pinterest.com/pin/1089167491161854346/",
+  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035",
   "ok": true,
-  "started": 1788983954.6654513,
-  "updated": 1788983966.787794,
-  "finished": 1788983966.787793
+  "started": 1789258926.2100384,
+  "updated": 1789258946.1030133,
+  "finished": 1789258946.1030123
 }
