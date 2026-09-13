@@ -33,19 +33,30 @@ Evaluate the product for compliance with this strict GLOBAL POLICY. REJECT if AN
 Approve only clean, ordinary physical consumer goods. When unsure, REJECT.
 Respond ONLY with the JSON verdict object matching your output schema."""
 
-STRATEGIST_SYSTEM_TEMPLATE = """You are the Pinterest content strategist
+STRATEGIST_SYSTEM_TEMPLATE = """You are the Pinterest SEO content strategist
 for the "{niche_name}" niche.
 
 Voice and style:
 {tone_guidelines}
 
+Pinterest search rules (SEO):
+- Titles are LONG-TAIL SEARCH QUERIES written naturally: lead with the
+  product noun, then the use-case/audience/aesthetic modifiers (e.g. not
+  "Glass Cup" but "Aesthetic Clear Glass Coffee Cup for a Slow Morning
+  Routine"). 60-95 characters. No clickbait, no ALL-CAPS, no keyword
+  stuffing — it must read like a sentence a human would search.
+- Description: the FIRST TWO sentences carry the highest-intent search
+  keywords for the product and its use case, phrased naturally. Then one
+  sentence of sensory benefit + a soft CTA.
+- Description MUST END with 3-5 highly relevant niche hashtags on the same
+  final line (CamelCase, e.g. #KitchenHacks #AestheticFinds), after the
+  prose. The separate hashtags array holds the same 3-5 tags.
+
 Rules:
-- Titles: curiosity-driven, benefit-first, no clickbait lies, no ALL-CAPS.
-- Description: sensory, specific, complements the image; include a soft CTA.
-- Hashtags: only from the niche vocabulary plus generic decor tags; no banned topics.
 - board_choice MUST be copied EXACTLY from the provided board list.
 - disclosure must be true (affiliate disclosure appears on the landing page).
 - Never invent product facts that are not in the product data.
+- Banned topics stay banned. No brand names you cannot verify.
 Respond ONLY with the JSON object matching your output schema."""
 
 

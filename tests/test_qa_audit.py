@@ -1018,3 +1018,65 @@ def test_pinterest_429_rate_limit_breaks_account_loop(mdb):
         assert (p.get("attempt") or {}).get("count") == 1
     # exactly ONE create attempt hit Pinterest before the clamp
     assert state["creates"] == 1
+
+
+# --- SEO board routing (growth upgrade, 2026-09-13) ---------------------------------
+
+
+def test_seo_boards_are_created_and_cached(mdb):
+    """A niche's seo_boards spec: missing board gets created via the API,
+    boards_cache is refreshed with it, and a per-niche alert fires. The
+    second run creates nothing (idempotent)."""
+    niche = mdb.niches.find_one({"name": "kitchen"})
+    mdb.niches.update_one({"_id": niche["_id"]}, {"$set": {"seo_boards": [
+        {"name": "Minimalist Kitchen Decor 2026",
+         "description": "Minimalist kitchen decor ideas for 2026 — clean "
+                        "countertop organization and aesthetic storage."}]}})
+
+    create_calls = {"n": 0}
+
+    class BoardRouter(BearerRouter):
+        """Boards listing includes the SEO board once it has been created —
+        mirroring the live API (a created board shows up in the listing)."""
+
+        def __call__(self, method, url, **kw):
+            if method == "GET" and url.endswith("/boards?page_size=100"):
+                if create_calls["n"] > 0:
+                    return reply({"items": [
+                        {"id": "b-kitchen", "name": "Kitchen Organization"},
+                        {"id": "seo-board-1", "name": "Minimalist Kitchen Decor 2026"}]})
+            if method == "POST" and url.endswith("/v5/boards"):
+                create_calls["n"] += 1
+                return reply({"id": f"seo-board-{create_calls['n']}",
+                              "name": "Minimalist Kitchen Decor 2026"}, status=201)
+            return super().__call__(method, url, **kw)
+
+    from datetime import timedelta as _td
+    acct0 = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
+    mdb.accounts.update_one({"_id": acct0["_id"]},
+        {"$set": {"boards_fetched_at": T0 - _td(minutes=30)}})
+    r1, f1 = make_runner(mdb, dry_run=False,
+                         adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+                         gemini_script=[], pinterest_router=BoardRouter(),
+                         run_id_suffix="seo1")
+    r1.execute()
+    assert create_calls["n"] == 1
+    assert r1.stats.get("seo_boards_created") == 1
+    assert any("SEO board" in m for m in f1["telegram"])
+
+    acct = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
+    names = [b["name"] for b in acct["boards_cache"]]
+    assert "Minimalist Kitchen Decor 2026" in names
+
+    # second run: board exists (cache now has it) — no duplicate creation
+    acct_cache = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})["boards_cache"]
+    r2, _ = make_runner(mdb, dry_run=False,
+                        adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+                        gemini_script=[], pinterest_router=BoardRouter(),
+                        run_id_suffix="seo2",
+                        now=T0 + timedelta(hours=25))
+    # the account's boards_cache must carry the SEO board into run 2
+    mdb.accounts.update_one({"name": "NeatSpace Kitchen"},
+        {"$set": {"boards_cache": acct_cache}})
+    r2.execute()
+    assert create_calls["n"] == 1  # still 1 — idempotent

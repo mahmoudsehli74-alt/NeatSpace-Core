@@ -11,11 +11,16 @@ wrapper, independently testable, no filesystem."""
 from __future__ import annotations
 
 import io
+import logging
+
+logger = logging.getLogger(__name__)
 
 RATIO_W, RATIO_H = 2, 3
 TOLERANCE = 0.02  # already-vertical passthrough band
 JPEG_QUALITY = 88
-MAX_EDGE = 1500  # cap canvas height; Pinterest sweet spot, payload-friendly
+# Pinterest-recommended exact pin canvas (1000x1500, 2:3). Padding-path
+# canvases are this size; native 2:3 sources still pass through untouched.
+CANVAS_W, CANVAS_H = 1000, 1500
 
 
 def to_vertical(image_bytes: bytes, *, quality: int = JPEG_QUALITY) -> bytes:
@@ -34,19 +39,22 @@ def to_vertical(image_bytes: bytes, *, quality: int = JPEG_QUALITY) -> bytes:
     if abs(current - target_ratio) <= TOLERANCE and height >= width:
         return image_bytes  # already vertical 2:3 — keep original bytes
 
+    if current >= 1.0:
+        logger.warning(
+            "[imaging] %sx%s source is %s — padding to 2:3 for Pinterest reach",
+            width, height, "square" if current == 1.0 else "horizontal",
+        )
+
     # Dominant color: 1x1 average (no deprecated getdata)
     dominant = src.resize((1, 1)).getpixel((0, 0))
 
-    canvas_h = max(height, int(round(width / target_ratio)))
-    canvas_h = min(canvas_h, MAX_EDGE)
-    canvas_w = min(int(round(canvas_h * target_ratio)), MAX_EDGE)
-    # If the cap shrunk the canvas below fitting the source, scale source down
+    # Exact Pinterest-optimal canvas; the source is centered at native size
+    # (downscaled only if larger than the canvas) — no quality-losing upscale.
+    canvas_w, canvas_h = CANVAS_W, CANVAS_H
     if width > canvas_w or height > canvas_h:
         scale = min(canvas_w / width, canvas_h / height)
         src = src.resize((max(1, int(width * scale)), max(1, int(height * scale))))
         width, height = src.size
-        canvas_h = max(height, int(round(width / target_ratio)))
-        canvas_w = int(round(canvas_h * target_ratio))
 
     canvas = Image.new("RGB", (canvas_w, canvas_h), dominant)
     canvas.paste(src, ((canvas_w - width) // 2, (canvas_h - height) // 2))

@@ -183,6 +183,49 @@ class PinterestTool:
             "url": f"https://www.pinterest.com/pin/{body['id']}/",
         }
 
+    def create_board(self, name: str, *, description: str = "") -> dict:
+        """POST /v5/boards — create an SEO board. Idempotent at the caller:
+        returns the existing board when Pinterest answers 409 (conflict)."""
+        payload = {"name": name[:179], "description": description[:498]}
+        reply = self._transport(
+            "POST",
+            f"{PINTEREST_API}/boards",
+            headers={**_bearer(self._token), "Content-Type": "application/json"},
+            json_body=payload,
+        )
+        if reply.status in (200, 201):
+            body = reply.json()
+            return {"id": body["id"], "name": body.get("name", name), "created": True}
+        if reply.status == 409:  # already exists — adopt it
+            boards = self.list_boards()
+            for board in boards:
+                if board["name"].lower() == name.lower():
+                    return {**board, "created": False}
+            raise PermanentError(f"[pinterest] board {name!r} conflicts but not listed")
+        _raise(reply.status, f"create board {name!r}", reply)
+        raise PermanentError("unreachable")
+
+    def update_account(self, *, bio: str | None = None,
+                       website_url: str | None = None) -> dict:
+        """PATCH /v5/user_account — SEO bio / site link (one-time ops call).
+        Returns the echoed account fields Pinterest accepted."""
+        payload: dict = {}
+        if bio is not None:
+            payload["bio"] = bio[:160]
+        if website_url is not None:
+            payload["website_url"] = website_url
+        reply = self._transport(
+            "PATCH",
+            f"{PINTEREST_API}/user_account",
+            headers={**_bearer(self._token), "Content-Type": "application/json"},
+            json_body=payload,
+        )
+        if reply.status != 200:
+            _raise(reply.status, "update user_account", reply)
+        body = reply.json()
+        return {"bio": body.get("bio"), "website_url": body.get("website_url"),
+                "username": body.get("username")}
+
     def get_pin_analytics(
         self,
         pin_id: str,

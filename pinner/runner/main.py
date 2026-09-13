@@ -191,6 +191,7 @@ class Runner:
             self.products.sweep(run_id=self.run_id, now=self.now())
             self.pins.sweep(run_id=self.run_id, now=self.now())
             self._requeue_orphaned_approvals()
+            self._ensure_seo_boards()
             self._discover()
             self._fetch_stage()
             self._moderation_stage()
@@ -251,6 +252,50 @@ class Runner:
                 self.stats["discovered"] += 1
                 if status == "created":
                     self.stats["new_products"] += 1
+
+    def _ensure_seo_boards(self) -> None:
+        """SEO board routing (growth upgrade 2026-09-13): niches may declare
+        `seo_boards` = [{name, description}] — hyper-niche, keyword boards.
+        Any missing board is created via POST /v5/boards (idempotent on 409)
+        and merged into the account's boards_cache, so the strategist can
+        route pins onto SEO surfaces. Failures are isolated per niche."""
+        for niche in self.db.niches.find({}, {"name": 1, "seo_boards": 1}):
+            spec = niche.get("seo_boards") or []
+            if not spec:
+                continue
+            accounts = list(self.db.accounts.find(
+                {"niche_id": niche["_id"], "status": {"$in": ["ACTIVE", "WARMUP"]}}))
+            for account in accounts:
+                try:
+                    tool = self._pinterest(account)
+                    live = {b["name"].lower() for b in tool.list_boards()}
+                    created = 0
+                    for board in spec:
+                        name = (board.get("name") or "").strip()
+                        if not name or name.lower() in live:
+                            continue
+                        result = tool.create_board(
+                            name, description=board.get("description", ""))
+                        live.add(result["name"].lower())
+                        created += 1
+                    if created:
+                        fresh = tool.list_boards()
+                        self.db.accounts.update_one(
+                            {"_id": account["_id"]},
+                            {"$set": {"boards_cache": fresh,
+                                      "boards_fetched_at": self.now()}},
+                        )
+                        self.stats["seo_boards_created"] = (
+                            self.stats.get("seo_boards_created", 0) + created)
+                        self._alert(
+                            f"[{self.run_id}] created {created} SEO board(s) "
+                            f"for {account.get('name')!r}"
+                        )
+                except Exception as exc:
+                    self._alert(
+                        f"[{self.run_id}] seo-board sync failed for "
+                        f"{niche.get('name')}: {type(exc).__name__}: {str(exc)[:150]}"
+                    )
 
     def _requeue_orphaned_approvals(self) -> None:
         """Self-heal (audit 2026-09-03): an APPROVED product with NO pin doc

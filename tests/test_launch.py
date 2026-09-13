@@ -143,6 +143,8 @@ def test_square_image_becomes_vertical_2x3():
     src.save(buf, format="JPEG")
     out = to_vertical(buf.getvalue())
     w, h = Image.open(io.BytesIO(out)).size
+    # Pinterest-optimal exact canvas on the padding path
+    assert (w, h) == (1000, 1500)
     assert abs(w / h - 2 / 3) < 0.01 and h >= w
 
 
