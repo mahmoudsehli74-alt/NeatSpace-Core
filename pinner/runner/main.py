@@ -51,6 +51,18 @@ from pinner.tools.bridge import BridgeTool
 from pinner.tools.http import Transport
 from pinner.tools.pinterest import PinterestTokenExpired, PinterestTool
 
+# Quota/overload-class retry policy (day-scoped attempt budget, weekend
+# audit 2026-09-13): these failures NEVER poison a doc. The budget is
+# day-scoped in effect — the breaker allows at most ONE quota/overload
+# failure per account-run and runs fire every 4h, so a doc spends at most
+# ~6 attempts/day, resetting naturally with the daily quota. 6h fixed
+# backoff regardless of accumulated count.
+QUOTA_ATTEMPT_BUDGET = 10_000
+
+
+def quota_backoff(count: int) -> int:
+    return 6 * 3600
+
 DISCLOSURE = "As an affiliate, we may earn from qualifying purchases."
 BOARDS_MAX_AGE_DAYS = 7
 DRY_RUN_EVENTS = ("CLAIM_BRIDGE", "CLAIM_VERIFY", "CLAIM_ENRICH")  # no CLAIM_PIN
@@ -427,47 +439,32 @@ class Runner:
                         )
                 except Exception as exc:
                     error_class = self._error_class(exc)
-                    # QUOTA CIRCUIT BREAKER (audit 2026-09-04): a gemini 429
-                    # means today's free-tier RPD is exhausted — every
-                    # remaining enrich attempt this run will burn quota and
-                    # poison docs at max_attempts. Stop THIS account's loop;
-                    # fail() marks the doc RETRY with 6h backoff (quota
-                    # resets daily), and the next cron picks it up cleanly.
-                    if self._is_quota_exhausted(exc):
+                    # QUOTA CIRCUIT BREAKER (audit 2026-09-04) + DAY-SCOPED
+                    # ATTEMPT BUDGET (weekend audit 2026-09-13). A gemini 429
+                    # means today's free-tier RPD is gone. Live data proved
+                    # the original clamp insufficient: on quota-out DAYS the
+                    # breaker still fired once per RUN, and 3 runs = 3
+                    # lifetime attempts = 7 docs poisoned DEAD across the
+                    # weekend. Fix: quota/overload-class failures NEVER
+                    # poison — they retry on a dedicated 6h schedule forever
+                    # (quota resets daily; the governor paces publication
+                    # anyway, so a queued doc waiting days is harmless).
+                    if self._is_quota_exhausted(exc) or self._is_gemini_overloaded(exc):
+                        quota = self._is_quota_exhausted(exc)
                         self.pins.fail(
                             pin_doc["_id"], error=str(exc),
                             error_class="TRANSIENT", run_id=self.run_id, now=self.now(),
+                            max_attempts=QUOTA_ATTEMPT_BUDGET,
+                            backoff=quota_backoff,
                         )
                         self.stats["pin_failed"] += 1
-                        self.stats["gemini_quota_breaks"] = (
-                            self.stats.get("gemini_quota_breaks", 0) + 1
-                        )
+                        key = "gemini_quota_breaks" if quota else "gemini_overload_breaks"
+                        self.stats[key] = self.stats.get(key, 0) + 1
                         self._alert(
-                            f"[{self.run_id}] gemini quota exhausted — pausing enrich "
-                            f"for {account.get('name')!r} until quota reset (docs retry "
-                            f"with 6h backoff)"
-                        )
-                        break
-                    # OVERLOAD BREAKER (audit 2026-09-08): gemini 503 "high
-                    # demand" spikes behave the same way at run scale — every
-                    # enrich attempt in the window fails and exhausts
-                    # max_attempts within a day (2 docs DEAD this morning on
-                    # exactly this). Clamp identically: one failure per
-                    # account-run, docs retry next run when the spike has
-                    # passed.
-                    if self._is_gemini_overloaded(exc):
-                        self.pins.fail(
-                            pin_doc["_id"], error=str(exc),
-                            error_class="TRANSIENT", run_id=self.run_id, now=self.now(),
-                        )
-                        self.stats["pin_failed"] += 1
-                        self.stats["gemini_overload_breaks"] = (
-                            self.stats.get("gemini_overload_breaks", 0) + 1
-                        )
-                        self._alert(
-                            f"[{self.run_id}] gemini overloaded (503) — pausing "
-                            f"enrich for {account.get('name')!r} this run; docs "
-                            f"retry next cycle"
+                            f"[{self.run_id}] gemini "
+                            f"{'quota exhausted' if quota else 'overloaded (503)'} — "
+                            f"pausing enrich for {account.get('name')!r} this run; "
+                            f"doc retries on the 6h quota schedule (never poisons)"
                         )
                         break
                     self.pins.fail(

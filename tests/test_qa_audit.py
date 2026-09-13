@@ -889,3 +889,40 @@ def test_discovery_keyword_rotation_round_robins(mdb):
         assert kitchen_kws[0] != kitchen_kws[1], (
             f"keyword did not rotate across days: {kitchen_kws}"
         )
+
+
+def test_quota_failures_across_runs_never_poison(mdb):
+    """DAY-SCOPED ATTEMPT BUDGET (2026-09-13): before this fix, 3 runs on a
+    quota-out day = 3 lifetime attempts = DEAD (7 docs poisoned across the
+    Sep 11-12 weekend). Quota failures now use a dedicated budget: fixed 6h
+    backoff, never poison. Simulates 3 consecutive quota-out runs on the
+    same doc."""
+    from datetime import timedelta as _td
+
+    from pinner.agents import AgentTransientError
+
+    quota_exc = AgentTransientError(
+        "gemini 429: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, "
+        "'message': 'You exceeded your current quota...'}}"
+    )
+    statuses = []
+    for day in range(3):
+        # day 0: moderation approves, then the strategist 429s. Days 1-2:
+        # the doc retries at ENRICHING, so only the strategist is called.
+        script = [approve_verdict(), quota_exc] if day == 0 else [quota_exc]
+        runner, _ = make_runner(
+            mdb, dry_run=False,
+            adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+            gemini_script=script,
+            run_id_suffix=f"qb-multi-{day}",
+            now=T0 + _td(days=day, hours=1),
+        )
+        stats = runner.execute()
+        doc = mdb.pins.find_one({"attempt.last_error": {"$regex": "429"}})
+        assert doc is not None, f"day {day}: no 429 doc; stats={stats}"
+        statuses.append((doc["status"], doc["attempt"]["count"],
+                         doc["attempt"]["next_attempt_at"]))
+    for status, count, next_at in statuses:
+        assert status != "DEAD", "quota failure must never poison"
+        assert next_at is not None, "retry must stay scheduled"
+    assert statuses[-1][1] == 3  # attempts accumulate, budget never exhausts
