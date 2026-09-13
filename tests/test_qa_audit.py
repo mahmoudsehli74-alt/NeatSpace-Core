@@ -990,8 +990,6 @@ def test_pinterest_429_rate_limit_breaks_account_loop(mdb):
     run fired ~20 create-pin calls in one window and Pinterest answered
     HTTP 429 for every one after the first few. The breaker must clamp at
     ONE failure per account-run and never poison."""
-    from pinner.tools.http import HttpReply
-
     state = {"creates": 0}
 
     class RateLimitedRouter(BearerRouter):
