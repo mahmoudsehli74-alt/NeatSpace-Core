@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260913-065640-0b617f",
+  "run_tag": "smoke-20260913-072859-ce7df5",
   "stages": {
     "account": {
       "ok": true,
@@ -12,12 +12,12 @@
       "product_id": "3256812473860035",
       "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora",
       "rejected_candidates": {
-        "3256812730338668": "REJECT: [\"Unauthorized use of registered trademark 'Command' (3M brand) in product title and description\"]"
+        "3256812730338668": "REJECT: [\"Unauthorized use of the trademarked brand name 'Command' (owned by 3M) in the product title, indic"
       }
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c4cN8anL"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c3NoBSGl"
     },
     "moderation": {
       "ok": true,
@@ -31,7 +31,7 @@
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "5988ea4f09960ee1993649ec24963146e1db533f",
+      "commit_sha": "0da96a91f4bd6a06e1ce2a35dffb439add801ad8",
       "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812473860035.json",
       "deployed": true,
       "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035"
@@ -40,7 +40,7 @@
   "pin_url": "https://www.pinterest.com/pin/1089167491161854346/",
   "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035",
   "ok": true,
-  "started": 1789282600.586297,
-  "updated": 1789282662.7974124,
-  "finished": 1789282662.797411
+  "started": 1789284539.2947516,
+  "updated": 1789284583.3190274,
+  "finished": 1789284583.3190265
 }
