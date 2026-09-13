@@ -853,6 +853,7 @@ def main(argv: list[str] | None = None) -> int:
         settings.gemini_api_key,
         model=model,
         fallback_api_key=settings.gemini_api_key_2,
+        cooldown_seconds=settings.gemini_rpm_cooldown_seconds,
     )
     deps = RunnerDeps(
         adapter=get_adapter(

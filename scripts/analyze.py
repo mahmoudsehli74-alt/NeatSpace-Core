@@ -91,7 +91,8 @@ def main() -> int:
     # run died on exactly this missing kwarg. Same override as the runner.
     client = GeminiJsonClient(settings.gemini_api_key,
                               model=os.environ.get("AGENT_MODEL") or DEFAULT_MODEL,
-                              fallback_api_key=settings.gemini_api_key_2)
+                              fallback_api_key=settings.gemini_api_key_2,
+                              cooldown_seconds=settings.gemini_rpm_cooldown_seconds)
     proposal = Analyst(client).review(data)
 
     # AUTOPILOT: apply immediately, then report what WAS done.

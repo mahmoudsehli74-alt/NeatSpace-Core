@@ -25,9 +25,11 @@ def build_agents(
     model: str = DEFAULT_MODEL,
     raw=None,
     fallback_api_key: str = "",
+    cooldown_seconds: float = 0.0,
 ) -> tuple[Moderator, Strategist]:
     client = GeminiJsonClient(api_key, model=model, raw=raw,
-                              fallback_api_key=fallback_api_key)
+                              fallback_api_key=fallback_api_key,
+                              cooldown_seconds=cooldown_seconds)
     return Moderator(client), Strategist(client)
 
 

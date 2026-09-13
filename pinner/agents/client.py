@@ -14,6 +14,7 @@ Error mapping:
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -68,6 +69,9 @@ class GeminiJsonClient:
         model: str,
         raw: RawClient | None = None,
         fallback_api_key: str = "",
+        cooldown_seconds: float = 0.0,
+        clock: Callable[[], float] = time.monotonic,
+        sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
         self._keys: list[str] = [k for k in (api_key, fallback_api_key) if k]
         if not self._keys:
@@ -76,10 +80,30 @@ class GeminiJsonClient:
         self.model = model
         self._raw = raw
         self._raws: dict[str, RawClient] = {}
+        # RPM governor: minimum gap between consecutive LLM HTTP attempts
+        # (free-tier per-minute limits). Applies to every attempt — rotated
+        # retries included — so neither key gets hammered. 0 disables it
+        # entirely (unit tests stay instant).
+        self.cooldown_seconds = max(0.0, float(cooldown_seconds))
+        self._clock = clock
+        self._sleeper = sleeper
+        self._last_call_ts: float | None = None
 
     @property
     def active_key(self) -> str:
         return self._keys[self._key_index]
+
+    def _respect_rpm_cooldown(self) -> None:
+        """Sleep out the remaining gap since the previous HTTP attempt."""
+        if self.cooldown_seconds <= 0 or self._last_call_ts is None:
+            return
+        elapsed = self._clock() - self._last_call_ts
+        remaining = self.cooldown_seconds - elapsed
+        if remaining > 0:
+            self._sleeper(remaining)
+
+    def _stamp_call(self) -> None:
+        self._last_call_ts = self._clock()
 
     def _rotate(self) -> bool:
         """Advance to the next key. Returns False when every key was tried."""
@@ -129,11 +153,14 @@ class GeminiJsonClient:
         )
         last_quota: Exception | None = None
         for _ in range(len(self._keys)):
+            self._respect_rpm_cooldown()
             try:
+                self._stamp_call()
                 response = self._client().models.generate_content(
                     model=self.model, contents=parts, config=config
                 )
             except Exception as exc:
+                self._stamp_call()
                 classified = self._classify(exc)
                 if self._is_quota(exc):
                     if self._rotate():

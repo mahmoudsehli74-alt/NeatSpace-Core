@@ -43,6 +43,9 @@ class Settings:
     # Optional second Gemini key: the LLM client fails over to it on 429
     # quota exhaustion, doubling daily enrichment capacity. Never required.
     gemini_api_key_2: str = field(default="", repr=False)
+    # RPM governor: minimum gap (seconds) between consecutive Gemini calls.
+    # Free-tier flash allows ~10-15 RPM; 5s spacing lands under it.
+    gemini_rpm_cooldown_seconds: float = 0.0
     aliexpress_app_key: str = field(default="", repr=False)
     aliexpress_app_secret: str = field(default="", repr=False)
     aliexpress_tracking_id: str = field(default="", repr=False)
@@ -154,6 +157,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         token_master_key=os.environ["TOKEN_MASTER_KEY"],
         gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
         gemini_api_key_2=os.environ.get("GEMINI_API_KEY_2", ""),
+        gemini_rpm_cooldown_seconds=float(
+            os.environ.get("GEMINI_RPM_COOLDOWN_SECONDS", "0") or 0
+        ),
         aliexpress_app_key=os.environ.get("ALIEXPRESS_APP_KEY", ""),
         aliexpress_app_secret=os.environ.get("ALIEXPRESS_APP_SECRET", ""),
         aliexpress_tracking_id=os.environ.get("ALIEXPRESS_TRACKING_ID", ""),

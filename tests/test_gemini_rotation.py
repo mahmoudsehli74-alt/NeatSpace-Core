@@ -1,9 +1,13 @@
-"""Gemini API-key failover tests (autopilot capacity, 2026-09-13).
+"""Gemini API-key failover + RPM governor tests (2026-09-13).
 
-Contract: on a quota-class failure (429 / RESOURCE_EXHAUSTED) the client
-rotates to the next key and retries the SAME prompt; non-quota failures
-raise immediately; when every key is exhausted the quota error bubbles so
-the runner's day-scoped QUOTA_ATTEMPT_BUDGET takes over.
+Failover contract: on a quota-class failure (429 / RESOURCE_EXHAUSTED) the
+client rotates to the next key and retries the SAME prompt; non-quota
+failures raise immediately; when every key is exhausted the quota error
+bubbles so the runner's day-scoped QUOTA_ATTEMPT_BUDGET takes over.
+
+RPM governor contract: with cooldown_seconds > 0, every HTTP attempt (the
+next prompt AND rotated retries) waits out the remaining gap since the
+previous attempt; cooldown 0 never sleeps.
 """
 
 from __future__ import annotations
@@ -135,3 +139,77 @@ def test_rotation_wraps_for_daily_reset():
 def test_client_requires_at_least_one_key():
     with pytest.raises(ValueError):
         GeminiJsonClient("", model="m", fallback_api_key="")
+
+
+# ── RPM governor ─────────────────────────────────────────────────────────────
+
+
+class _FakeClock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def test_rpm_cooldown_sleeps_between_calls():
+    """Second consecutive call waits out the full cooldown when no real
+    time has passed (clock is frozen)."""
+    clock = _FakeClock()
+    sleeps: list[float] = []
+    raw = ScriptedRaw(_ok_response(), _ok_response())
+    client = GeminiJsonClient("k1", model="m", raw=raw,
+                              fallback_api_key="k2",
+                              cooldown_seconds=5.0,
+                              clock=clock, sleeper=sleeps.append)
+    client.generate(system="s", user="u", schema=StrategyContent)
+    client.generate(system="s", user="u", schema=StrategyContent)
+    assert sleeps == [5.0]  # exactly one full gap before the second call
+
+
+def test_rpm_cooldown_partial_gap_skips_sleep():
+    """If enough real time already passed, no sleep is charged."""
+    clock = _FakeClock()
+    sleeps: list[float] = []
+    raw = ScriptedRaw(_ok_response(), _ok_response())
+    client = GeminiJsonClient("k1", model="m", raw=raw,
+                              fallback_api_key="k2",
+                              cooldown_seconds=5.0,
+                              clock=clock, sleeper=sleeps.append)
+    client.generate(system="s", user="u", schema=StrategyContent)
+    clock.advance(9.0)  # longer than the 5s cooldown
+    client.generate(system="s", user="u", schema=StrategyContent)
+    assert sleeps == []
+
+
+def test_rpm_cooldown_applies_to_rotated_retry():
+    """The rotated retry on the fallback key is ALSO spaced — the governor
+    protects both keys, per the operator requirement."""
+    clock = _FakeClock()
+    sleeps: list[float] = []
+    raw = ScriptedRaw(QuotaError("429"), _ok_response())
+    client = GeminiJsonClient("k1", model="m", raw=raw,
+                              fallback_api_key="k2",
+                              cooldown_seconds=5.0,
+                              clock=clock, sleeper=sleeps.append)
+    result = client.generate(system="s", user="u", schema=StrategyContent)
+    assert result.title == "Rotated Find"
+    assert sleeps == [5.0]  # the rotated retry waited the cooldown
+    assert client.active_key == "k2"
+
+
+def test_rpm_cooldown_zero_never_sleeps():
+    """cooldown 0 (unit-test default) — zero sleeps, zero overhead."""
+    sleeps: list[float] = []
+    raw = ScriptedRaw(_ok_response(), _ok_response(), _ok_response())
+    client = GeminiJsonClient("k1", model="m", raw=raw,
+                              fallback_api_key="k2",
+                              cooldown_seconds=0.0,
+                              clock=_FakeClock(), sleeper=sleeps.append)
+    client.generate(system="s", user="u", schema=StrategyContent)
+    client.generate(system="s", user="u", schema=StrategyContent)
+    assert sleeps == []
+    assert client.active_key == "k1"  # no rotation, no delay
