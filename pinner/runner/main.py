@@ -467,6 +467,30 @@ class Runner:
                             f"doc retries on the 6h quota schedule (never poisons)"
                         )
                         break
+                    # PINTEREST RATE-LIMIT BREAKER (live 2026-09-13): after
+                    # a backlog-clearing run pushed ~20 create-pin calls in
+                    # one window, Pinterest itself answered HTTP 429
+                    # ("Sorry!...") for every subsequent create — 18 docs
+                    # hammered in a row. Same clamp as the gemini breakers:
+                    # one failure per account-run, never poison, retry next
+                    # cycle when the limit window has passed.
+                    if isinstance(exc, ToolTransientError) and "HTTP 429" in str(exc):
+                        self.pins.fail(
+                            pin_doc["_id"], error=str(exc),
+                            error_class="TRANSIENT", run_id=self.run_id, now=self.now(),
+                            max_attempts=QUOTA_ATTEMPT_BUDGET,
+                            backoff=quota_backoff,
+                        )
+                        self.stats["pin_failed"] += 1
+                        self.stats["pinterest_rate_breaks"] = (
+                            self.stats.get("pinterest_rate_breaks", 0) + 1
+                        )
+                        self._alert(
+                            f"[{self.run_id}] Pinterest rate limit (429) — pausing "
+                            f"pinning for {account.get('name')!r} this run; docs "
+                            f"retry next cycle"
+                        )
+                        break
                     self.pins.fail(
                         pin_doc["_id"], error=str(exc), error_class=error_class,
                         run_id=self.run_id, now=self.now(),

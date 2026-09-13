@@ -983,3 +983,40 @@ def test_primary_key_429_falls_over_to_second_key(mdb):
     assert not list(mdb.pins.find({"status": "DEAD"}))
     doc = mdb.pins.find_one({"status": "VERIFIED"})
     assert doc["pin"]["pin_id"].startswith("pin-")
+
+
+def test_pinterest_429_rate_limit_breaks_account_loop(mdb):
+    """PINTEREST RATE-LIMIT BREAKER (live 2026-09-13): a backlog-clearing
+    run fired ~20 create-pin calls in one window and Pinterest answered
+    HTTP 429 for every one after the first few. The breaker must clamp at
+    ONE failure per account-run and never poison."""
+    from pinner.tools.http import HttpReply
+
+    state = {"creates": 0}
+
+    class RateLimitedRouter(BearerRouter):
+        def __call__(self, method, url, **kw):
+            if method == "POST" and url.endswith("/v5/pins"):
+                state["creates"] += 1
+                return reply({"code": 9, "message": "Sorry! We..."}, status=429)
+            return super().__call__(method, url, **kw)
+
+    runner, fakes = make_runner(
+        mdb, dry_run=False,
+        adapter=MultiNicheAdapter(active_niches=("kitchen",)),
+        gemini_script=[approve_verdict(), good_strategy()],
+        pinterest_router=RateLimitedRouter(),
+        run_id_suffix="pin429",
+    )
+    stats = runner.execute()
+
+    assert stats.get("pinterest_rate_breaks", 0) >= 1
+    assert stats.get("pinned", 0) == 0
+    assert any("Pinterest rate limit" in m for m in fakes["telegram"])
+    hit = [p for p in mdb.pins.find({})
+           if "HTTP 429" in str((p.get("attempt") or {}).get("last_error") or "")]
+    for p in hit:
+        assert p["status"] != "DEAD", "Pinterest 429 must never poison"
+        assert (p.get("attempt") or {}).get("count") == 1
+    # exactly ONE create attempt hit Pinterest before the clamp
+    assert state["creates"] == 1
