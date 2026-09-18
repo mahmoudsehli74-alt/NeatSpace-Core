@@ -123,6 +123,7 @@ def test_apply_domains_sets_custom_domains_and_resets_bridges(mdb):
     assert summary["bridges_reset"] == 1
     cleared = mdb.pins.find_one({"product_id": product["_id"]})
     assert "bridge" not in cleared  # regenerated on the custom domain next run
+    assert cleared["status"] == "ENRICHED"  # claimable again for re-bridging
 
 
 def test_apply_domains_reports_missing_account(mdb):

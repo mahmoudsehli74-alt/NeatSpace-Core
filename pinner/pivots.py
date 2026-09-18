@@ -18,13 +18,16 @@ Safety contract — the analyst is an LLM and its proposals are UNTRUSTED text:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pymongo.errors import PyMongoError
 
 logger = logging.getLogger(__name__)
 
 MAX_GUIDELINE_CHARS = 400
+# total cap on tone_guidelines: truncating the tail keeps the seed voice and
+# earliest pivots, so accumulated notes can never crowd out the original voice
+MAX_GUIDELINES_TOTAL = 2000
 MAX_PIVOTS_PER_WEEK = 5
 MIN_IMPRESSIONS_TO_APPLY = 50
 
@@ -42,7 +45,7 @@ PROTECTED = ("banned_topics", "board_keywords", "hashtag_count_range", "quotas")
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def apply_pivots(db, proposal, *, aggregate: dict, now: datetime | None = None) -> dict:
@@ -88,8 +91,9 @@ def apply_pivots(db, proposal, *, aggregate: dict, now: datetime | None = None) 
                     # the strategist prompt reads tone_guidelines — carry the
                     # pivot into the live voice, capped so the seed voice
                     # always dominates over accumulated pivots
-                    new_guidelines = (niche.get("tone_guidelines", "")
-                                     + note[:MAX_GUIDELINE_CHARS])
+                    new_guidelines = ((niche.get("tone_guidelines", "")
+                                       + note[:MAX_GUIDELINE_CHARS])
+                                      [:MAX_GUIDELINES_TOTAL])
                     db.niches.update_one(
                         {"_id": niche["_id"]},
                         {"$set": {"tone_guidelines": new_guidelines,

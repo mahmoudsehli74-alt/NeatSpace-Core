@@ -219,16 +219,36 @@ class Runner:
             if niche is None or niche["_id"] in seen_niches:
                 continue
             seen_niches.add(niche["_id"])
-            # KEYWORD ROTATION (live audit 2026-09-09): always searching
-            # board_keywords[0] exhausts shallow keyword wells — the selfcare
-            # niche's first keyword surfaces only 2 candidates (both already
-            # cataloged), starving the queue while kitchen/aesthetics get 8
-            # fresh candidates each. Rotate deterministically across the
-            # niche's keywords: one keyword per run, round-robin by date.
+            # SOURCING WEIGHTS (formalized 2026-09-16, the Wednesday reveal):
+            # niche["sourcing_weights"] = {keyword: weight} written by the
+            # Auto-Pilot calibration from measured board CTR — heavier
+            # keywords are searched more often. The pick is
+            # score = weight x days-since-last-searched (deterministic),
+            # which both honors weights AND guarantees rotation (an
+            # just-searched keyword demotes itself until its cooldown
+            # decays). Falls back to uniform rotation when no weights are
+            # configured.
             kws = niche.get("board_keywords") or ["home"]
-            keywords = kws[self.now().toordinal() % len(kws)]
+            weights = niche.get("sourcing_weights") or {}
+            stats_kw = niche.get("keyword_stats") or {}
+            def _score(kw: str) -> float:
+                if not weights:
+                    # no weights configured: legacy date rotation (deterministic)
+                    return float(self.now().toordinal() % len(kws) == kws.index(kw))
+                weight = float(weights.get(kw, 1.0))
+                last = (stats_kw.get(kw) or {}).get("last_searched")
+                days_since = 99.0 if last is None else max(
+                    0.0, (self.now() - last).total_seconds() / 86400)
+                return weight * (days_since + 1.0)
+            keywords = max(kws, key=_score)
             try:
                 candidates = self.deps.adapter.search_products(keywords, max_results=8)
+                self.db.niches.update_one(
+                    {"_id": niche["_id"]},
+                    {"$set": {f"keyword_stats.{keywords}.last_searched": self.now(),
+                              f"keyword_stats.{keywords}.times":
+                                  (stats_kw.get(keywords) or {}).get("times", 0) + 1}},
+                )
             except Exception as exc:
                 self.stats["discovery_errors"] += 1
                 detail = str(exc)[:400]  # adapter diagnostics now embedded in msg
@@ -259,6 +279,10 @@ class Runner:
         Any missing board is created via POST /v5/boards (idempotent on 409)
         and merged into the account's boards_cache, so the strategist can
         route pins onto SEO surfaces. Failures are isolated per niche."""
+        # dry-run contract (module docstring / DRY_RUN_EVENTS): Pinterest is
+        # NEVER called — no board creation, no boards_cache writes
+        if self.cfg.dry_run:
+            return
         for niche in self.db.niches.find({}, {"name": 1, "seo_boards": 1}):
             spec = niche.get("seo_boards") or []
             if not spec:

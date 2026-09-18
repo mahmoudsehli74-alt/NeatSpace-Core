@@ -1080,3 +1080,59 @@ def test_seo_boards_are_created_and_cached(mdb):
         {"$set": {"boards_cache": acct_cache}})
     r2.execute()
     assert create_calls["n"] == 1  # still 1 — idempotent
+
+
+def test_discovery_keyword_weights_drive_sourcing(mdb):
+    """FORMALIZED STRATEGY (Wednesday reveal 2026-09-16): measured board
+    performance becomes discovery behavior. A keyword with sourcing weight 3
+    outranks a weight-1 keyword even when both are fresh; and the chosen
+    keyword demotes itself (days-since decays) so rotation still happens."""
+    calls: list[str] = []
+
+    class RecordingAdapter(MultiNicheAdapter):
+        """'storage ideas' is a kitchen-storage keyword but carries no niche
+        stem, so the probe-rejection path would refuse it — the override
+        serves a kitchen candidate for it, exactly like the real adapter
+        accepts any keyword."""
+
+        def search_products(self, niche_query, *, max_results=10):
+            calls.append(niche_query)
+            if niche_query == "storage ideas":
+                from pinner.adapters.base import CandidateProduct
+
+                return [CandidateProduct(
+                    source=self.name, source_product_id="3256819999000001",
+                    title="Storage Ideas Curated Piece",
+                    image_url="https://cdn/i.jpg",
+                    product_url="https://www.aliexpress.com/item/3256819999000001.html")]
+            return super().search_products(niche_query, max_results=max_results)
+
+    acct = mdb.accounts.find_one({"name": "NeatSpace Kitchen"})
+    mdb.niches.update_one({"_id": acct["niche_id"]}, {"$set": {
+        "board_keywords": ["storage ideas", "kitchen organization",
+                           "kitchen decor", "meal prep"],
+        "sourcing_weights": {"storage ideas": 3, "kitchen organization": 2,
+                             "kitchen decor": 1, "meal prep": 1}}})
+    from datetime import timedelta as _td
+    runner, _ = make_runner(mdb, dry_run=False, adapter=RecordingAdapter(),
+                            gemini_script=[],
+                            run_id_suffix="wt1",
+                            now=T0 + _td(days=1))
+    runner.execute()
+    stats_after_1 = mdb.niches.find_one({"name": "kitchen"}).get("keyword_stats")
+    print("  [dbg] keyword_stats after run1:", stats_after_1)
+    kitchen_calls = [k for k in calls if k in
+                     ("storage ideas", "kitchen organization",
+                      "kitchen decor", "meal prep")]
+    assert kitchen_calls == ["storage ideas"]  # weight-3 wins day 1
+
+    # day 2: "storage ideas" was just searched (days_since≈0 → score 3) but
+    # "kitchen organization" has days_since=1 → score 2×2=4 wins
+    runner2, _ = make_runner(mdb, dry_run=False, adapter=RecordingAdapter(),
+                             gemini_script=[], run_id_suffix="wt2",
+                             now=T0 + _td(days=1, hours=6))
+    runner2.execute()
+    kitchen_calls = [k for k in calls if k in
+                     ("storage ideas", "kitchen organization",
+                      "kitchen decor", "meal prep")]
+    assert kitchen_calls == ["storage ideas", "kitchen organization"], calls

@@ -45,10 +45,16 @@ def apply_domains(db, mapping: dict[str, str]) -> dict:
             "domain": domain, "repo": account["site"]["repo_full_name"],
         }
 
+    # Only BRIDGED/PAUSED docs ever carry a bridge (written at BRIDGE_OK).
+    # Unsetting the bridge alone would brick them: _stage_pin reads
+    # bridge["url"] and the machine has no direct BRIDGED->re-bridge path,
+    # so hand them back to ENRICHED — the next run re-bridges on the new
+    # domain. QUEUED/ENRICHED docs never match (no bridge.url) and are
+    # deliberately left out of the filter.
     reset = db.pins.update_many(
         {"bridge.url": {"$exists": True},
-         "status": {"$in": ["QUEUED", "ENRICHED", "BRIDGED", "PAUSED"]}},
-        {"$unset": {"bridge": ""}},
+         "status": {"$in": ["BRIDGED", "PAUSED"]}},
+        {"$unset": {"bridge": ""}, "$set": {"status": "ENRICHED"}},
     )
     summary["bridges_reset"] = reset.modified_count
     return summary

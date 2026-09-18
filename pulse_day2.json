@@ -1,0 +1,52 @@
+{
+ "window": [
+  "2026-09-14",
+  "2026-09-15"
+ ],
+ "accounts": {
+  "NeatSpace Kitchen": {
+   "IMPRESSION": 0.0,
+   "PIN_CLICK": 0.0,
+   "OUTBOUND_CLICK": 0.0,
+   "SAVE": 0.0
+  },
+  "NeatSpace Aesthetics": {
+   "IMPRESSION": 0.0,
+   "PIN_CLICK": 0.0,
+   "OUTBOUND_CLICK": 0.0,
+   "SAVE": 0.0
+  },
+  "NeatSpace Selfcare": {
+   "IMPRESSION": 0.0,
+   "PIN_CLICK": 0.0,
+   "OUTBOUND_CLICK": 0.0,
+   "SAVE": 0.0
+  }
+ },
+ "claim": {
+  "NeatSpace Kitchen": {
+   "username": "neatspace_kitchen",
+   "website_url": "http://neatspacekitchen.store",
+   "is_any_website_verified": null,
+   "website_verification_state": null,
+   "connected_id": null,
+   "profile_image": "https://i.pinimg.com/600x600_R/ed/f5/1c/edf51c6bfe404694dd399eec14023025.jpg"
+  },
+  "NeatSpace Aesthetics": {
+   "username": "neatspace_aesthetics",
+   "website_url": "http://neatspaceaesthetics.site",
+   "is_any_website_verified": null,
+   "website_verification_state": null,
+   "connected_id": null,
+   "profile_image": "https://i.pinimg.com/600x600_R/f6/b9/bf/f6b9bf759377d6089745fbb5aee2008c.jpg"
+  },
+  "NeatSpace Selfcare": {
+   "username": "neatspace_selfcare",
+   "website_url": "http://neatspaceselfcare.online",
+   "is_any_website_verified": null,
+   "website_verification_state": null,
+   "connected_id": null,
+   "profile_image": "https://i.pinimg.com/600x600_R/04/73/02/0473028c1f52c728188e708eace7c498.jpg"
+  }
+ }
+}
