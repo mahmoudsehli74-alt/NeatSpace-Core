@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260913-082603-5c785e",
+  "run_tag": "smoke-20260918-055323-7d703d",
   "stages": {
     "account": {
       "ok": true,
@@ -9,15 +9,13 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812473860035",
-      "title": "Scalable Drawer Organizer Adjustable Household Cabinet Storage Box Stackable Kitchen Organizer Home Classification Stora",
-      "rejected_candidates": {
-        "3256812730338668": "REJECT: [\"Trademark/IP risk due to unauthorized use of brand name 'Command' (3M trademark) in product title\""
-      }
+      "product_id": "3256812746616353",
+      "title": "360\u00b0 Rotation 3\u2011In\u20111 Suction Cup Magnetic Phone Holder Multi\u2011Angle Adjustable Foldable Magnet Phone Stand Desktop Bracke",
+      "rejected_candidates": {}
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3r7iS1B"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c2xnmGFL"
     },
     "moderation": {
       "ok": true,
@@ -27,20 +25,20 @@
       "ok": true,
       "width": 1000,
       "height": 1500,
-      "source_bytes": 70456
+      "source_bytes": 117378
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "f2a144a3c66d7431aa15e17b610c6aacbb6237b5",
-      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812473860035.json",
+      "commit_sha": "57c773fe03953c731368376295a73bf8b49c4766",
+      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812746616353.json",
       "deployed": true,
-      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035"
+      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812746616353"
     }
   },
-  "pin_url": "https://www.pinterest.com/pin/1089167491161854346/",
-  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812473860035",
+  "pin_url": "https://www.pinterest.com/pin/1089167491162454054/",
+  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812746616353",
   "ok": true,
-  "started": 1789287963.559035,
-  "updated": 1789287982.1562772,
-  "finished": 1789287982.156276
+  "started": 1789710803.1349437,
+  "updated": 1789710814.8466463,
+  "finished": 1789710814.8466446
 }
