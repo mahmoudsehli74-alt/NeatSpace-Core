@@ -1136,3 +1136,21 @@ def test_discovery_keyword_weights_drive_sourcing(mdb):
                      ("storage ideas", "kitchen organization",
                       "kitchen decor", "meal prep")]
     assert kitchen_calls == ["storage ideas", "kitchen organization"], calls
+
+
+def test_rpm_cooldown_config_flows_into_settings():
+    """The RPM governor is env-tunable without code changes."""
+    import os as _os
+
+    from pinner.config import load_settings
+
+    old = _os.environ.get("GEMINI_RPM_COOLDOWN_SECONDS")
+    try:
+        _os.environ["GEMINI_RPM_COOLDOWN_SECONDS"] = "7.5"
+        settings = load_settings(env_file=None)
+        assert settings.gemini_rpm_cooldown_seconds == 7.5
+    finally:
+        if old is None:
+            _os.environ.pop("GEMINI_RPM_COOLDOWN_SECONDS", None)
+        else:
+            _os.environ["GEMINI_RPM_COOLDOWN_SECONDS"] = old
