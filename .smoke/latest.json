@@ -1,5 +1,5 @@
 {
-  "run_tag": "smoke-20260918-061904-5e6830",
+  "run_tag": "smoke-20260919-113059-631763",
   "stages": {
     "account": {
       "ok": true,
@@ -9,13 +9,13 @@
     },
     "discover": {
       "ok": true,
-      "product_id": "3256812746616353",
-      "title": "360\u00b0 Rotation 3\u2011In\u20111 Suction Cup Magnetic Phone Holder Multi\u2011Angle Adjustable Foldable Magnet Phone Stand Desktop Bracke",
+      "product_id": "3256812954230002",
+      "title": "6Pcs Wall Mount Phone Holder Adhesive Self-Standing Rack Charging Stand Storage Organizer for Home Office Kitchen Bathro",
       "rejected_candidates": {}
     },
     "affiliate": {
       "ok": true,
-      "affiliate_url": "https://s.click.aliexpress.com/e/_c3yFat5x"
+      "affiliate_url": "https://s.click.aliexpress.com/e/_c3RGOW0h"
     },
     "moderation": {
       "ok": true,
@@ -25,20 +25,19 @@
       "ok": true,
       "width": 1000,
       "height": 1500,
-      "source_bytes": 117378
+      "source_bytes": 67980
     },
     "bridge": {
       "ok": true,
-      "commit_sha": "27c575cc799c285bafc35984ba3dfc7a5e1e33ed",
-      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812746616353.json",
+      "commit_sha": "e75e898e4127f963c89d94ce4b3f5df1c29fdd42",
+      "json_url": "https://neatspacekitchen.store/products/aliexpress-3256812954230002.json",
       "deployed": true,
-      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812746616353"
+      "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812954230002"
     }
   },
-  "pin_url": "https://www.pinterest.com/pin/1089167491162454054/",
-  "destination": "https://neatspacekitchen.store/?id=aliexpress-3256812746616353",
-  "ok": true,
-  "started": 1789712344.8322327,
-  "updated": 1789712357.4126842,
-  "finished": 1789712357.412683
+  "pin_url": null,
+  "destination": null,
+  "ok": false,
+  "started": 1789817459.458835,
+  "updated": 1789817524.1203256
 }
