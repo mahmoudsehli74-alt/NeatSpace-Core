@@ -17,7 +17,8 @@ class ModerationVerdict(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     risk_flags: list[str] = Field(
         default_factory=list,
-        description="subset of: adult, weapons, counterfeit_risk, ip_risk, halal_violation",
+        description=("subset of: adult, weapons, counterfeit_risk, ip_risk, "
+                     "halal_violation, religious_symbols"),
     )
 
 

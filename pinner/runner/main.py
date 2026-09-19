@@ -39,6 +39,7 @@ from pinner.adapters.base import (
 from pinner.agents import DEFAULT_MODEL, Moderator, Strategist
 from pinner.agents.guardrails import GuardrailError
 from pinner.agents.schemas import ModerationVerdict
+from pinner.brand_safety import violations as brand_violations
 from pinner.crypto.tokens import TokenDecryptionError
 from pinner.errors import PermanentError as ToolPermanentError
 from pinner.errors import TransientError as ToolTransientError
@@ -406,7 +407,22 @@ class Runner:
                 return
             try:
                 self._count_gemini()
+                # BRAND-SAFETY FORTRESS (2026-09-14): hardcoded scan of the
+                # RAW listing — deterministic, overrides any LLM verdict.
+                raw_text = " ".join(str(claimed.get(k) or "") for k in
+                                    ("title", "description")) or json.dumps(
+                    (claimed.get("raw") or {}), ensure_ascii=False)
+                hits = brand_violations(
+                    (claimed.get("raw") or {}).get("title"),
+                    (claimed.get("raw") or {}).get("description"),
+                    raw_text,
+                )
                 verdict: ModerationVerdict = self.deps.moderator.review(claimed.get("raw") or {})
+                if hits:
+                    verdict = ModerationVerdict(
+                        verdict="REJECT", confidence=1.0,
+                        reasons=[f"brand-safety blocklist: {hits}"],
+                        categories=["religious_symbols"], risk_flags=["religious_symbols"])
                 event = "MODERATE_APPROVE" if verdict.verdict == "APPROVE" else "MODERATE_REJECT"
                 self.products.transition(
                     claimed["_id"],
@@ -630,6 +646,17 @@ class Runner:
     def _stage_bridge(self, pin_doc: dict, account: dict) -> None:
         product = self.db.products.find_one({"_id": pin_doc["product_id"]})
         content = pin_doc["content"]
+        # FINAL GATE (brand-safety fortress): scan the exact payload that
+        # would go public — product listing text + generated copy. Nothing
+        # religious reaches GitHub/Past this line.
+        raw = (product or {}).get("raw") or {}
+        gate_hits = brand_violations(
+            content.get("title"), content.get("description"),
+            *(content.get("hashtags") or []),
+            raw.get("title"), raw.get("description"))
+        if gate_hits:
+            raise ToolPermanentError(
+                f"brand-safety blocklist at bridge gate: {gate_hits}")
         repo = account["site"]["repo_full_name"]
         subdomain = repo.split("/")[-1]
         product_key = f"{product['source']}-{product['source_product_id']}"

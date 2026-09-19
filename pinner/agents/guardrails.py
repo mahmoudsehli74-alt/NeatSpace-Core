@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 
 from pinner.agents.schemas import ModerationVerdict, StrategyContent
+from pinner.brand_safety import scan as brand_scan
 
 # Never allowed in ANY agent output text (injection echo / platform risk).
 GLOBAL_BANNED_PATTERNS = (
@@ -39,7 +40,7 @@ def check_verdict(verdict: ModerationVerdict) -> None:
     if verdict.verdict == "REJECT" and not verdict.reasons:
         problems.append("REJECT verdict must include at least one reason")
     if verdict.verdict == "APPROVE":
-        fatal = {"adult", "weapons"} & set(verdict.risk_flags)
+        fatal = {"adult", "weapons", "religious_symbols"} & set(verdict.risk_flags)
         if fatal:
             problems.append(f"APPROVE contradicts fatal risk flags: {sorted(fatal)}")
         if verdict.confidence < 0.5:
@@ -75,6 +76,12 @@ def check_strategy(content: StrategyContent, niche: dict, boards: list[str]) -> 
             problems.append(f"banned niche topic in output: {topic!r}")
 
     problems.extend(_scan_banned(f"{content.title} {content.description}"))
+
+    # BRAND-SAFETY FORTRESS (2026-09-14): hardcoded religious-symbol scan on
+    # generated copy — deterministic, never delegated to the LLM's judgment.
+    hits = brand_scan(content.title, content.description, *content.hashtags)
+    if hits:
+        problems.append(f"brand-safety blocklist match: {hits}")
 
     if problems:
         raise GuardrailError("; ".join(problems))

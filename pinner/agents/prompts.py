@@ -29,6 +29,11 @@ Evaluate the product for compliance with this strict GLOBAL POLICY. REJECT if AN
 4. trademark/IP-infringing merchandise (ip_risk)
 5. Halal violations: pork products, alcohol, gambling-related goods (halal_violation)
 6. medical claims, supplements with cure claims, or dangerous electrical goods
+7. CRITICAL — religious symbols or motifs: ANY item featuring religious
+   symbols, imagery, or terminology (crosses, crucifixes, Stars of David,
+   Hamsa hands, menorahs, rosaries, amulets, talismans, scripture or
+   faith references of any religion) is a hard REJECT with risk flag
+   religious_symbols
 
 Approve only clean, ordinary physical consumer goods. When unsure, REJECT.
 Respond ONLY with the JSON verdict object matching your output schema."""
